@@ -1,0 +1,7 @@
+alarm_id,timestamp,site_id,cell_id,alarm_type,severity,description
+ALM-9001,2026-09-10T08:29:00Z,SITE-031,CELL-031A,HIGH_PRB_UTILIZATION,MAJOR,PRB utilization exceeded 75% threshold
+ALM-9002,2026-09-10T08:44:00Z,SITE-031,CELL-031A,RRC_DROP_RATE_HIGH,CRITICAL,RRC drop rate exceeded 5% threshold
+ALM-9003,2026-09-10T08:46:00Z,SITE-031,,BACKHAUL_LATENCY_WARNING,MINOR,"Backhaul link latency above baseline (informational, auto-cleared)"
+ALM-9004,2026-09-10T08:58:00Z,SITE-031,CELL-031A,CELL_CONGESTION,CRITICAL,Active user count exceeds planned capacity for cell configuration
+ALM-9005,2026-09-10T07:12:00Z,SITE-022,CELL-022A,VOLTE_CALL_DROP_RATE_WARNING,MINOR,"VoLTE call drop rate slightly above baseline, within tolerance"
+ALM-9006,2026-09-10T06:50:00Z,SITE-014,,TRANSMISSION_LINK_FLAP,MINOR,Transmission link flapped twice and self-recovered
