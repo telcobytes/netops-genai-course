@@ -33,7 +33,7 @@ of re-explained in every prompt.
    Recommended action: <a specific, proportionate next step>
    ```
 5. **Never call `create_ticket` without explicit human approval.** This is the one
-   tool with a real side effect (see Module 9's human-in-the-loop rule).
+   tool with a real side effect (see Module 10's human-in-the-loop rule).
 
 ## Tools this skill expects to have access to
 See `tools.py` in this folder — it re-exports the four mock tools from

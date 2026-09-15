@@ -111,7 +111,7 @@ This course assumes basic Python comfort (reading functions and dictionaries). I
 ### A. Dictionary Access & List Comprehensions
 Filtering alarms or KPI rows:
 ```python
-# Filtering list of dicts (used in Module 10 Detect step)
+# Filtering list of dicts (used in Module 11 Detect step)
 major_alarms = [a for a in active_alarms if a["severity"] in ("MAJOR", "CRITICAL")]
 ```
 
@@ -134,7 +134,7 @@ def get_cell_kpis(cell_id: str, window_minutes: int = 15) -> list[dict]:
 ```
 
 ### D. Decorators (FastMCP Syntax)
-In Module 8, tools are exposed via Python decorators:
+In Module 9, tools are exposed via Python decorators:
 ```python
 from mcp.server.fastmcp import FastMCP
 mcp = FastMCP("noc-tools")

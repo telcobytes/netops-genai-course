@@ -127,7 +127,7 @@ def _messages_to_gemini(messages):
 
     # Gemini expects consecutive function-response parts merged into one turn
     # rather than sent as separate back-to-back "user" turns (matters when the
-    # model made several parallel tool calls in Module 6/10).
+    # model made several parallel tool calls in Module 6/11).
     merged = []
     for content in raw_contents:
         is_fn_response = all(getattr(p, "function_response", None) for p in content.parts)

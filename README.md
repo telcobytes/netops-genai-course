@@ -82,6 +82,7 @@ Every script can be run directly from the **repository root** without changing d
 
 | Module | Hands-On Topic | Command to Run from Repo Root |
 |---|---|---|
+| **01** | *First API call — the 3-line pattern* | `python module01-summarizer/gemini_quickstart.py` |
 | **01** | Incident Summarizer | `python module01-summarizer/summarizer.py` |
 | **02** | Deep Research (No-Code) | *(Explore `data/module2_notebooklm_sample_doc.md` in NotebookLM)* |
 | **03** | Structured Anomaly Explainer | `python module03-anomaly-explainer/anomaly_explainer.py CELL-031A` |

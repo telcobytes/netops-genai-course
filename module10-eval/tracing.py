@@ -1,5 +1,5 @@
 """
-tracing.py — Module 9 hands-on: instrument tool calls with lightweight tracing
+tracing.py — Module 10 hands-on: instrument tool calls with lightweight tracing
 
 A minimal decorator that logs every tool call (name, arguments, result, timing)
 to a JSONL file — the same idea as production tracing (LangSmith, Langfuse,

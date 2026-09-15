@@ -1,13 +1,13 @@
 """
-noc_copilot.py — Module 10 capstone: the full NOC Copilot pipeline
+noc_copilot.py — Module 11 capstone: the full NOC Copilot pipeline
 
 Combines every module's piece into one end-to-end autonomous triage agent:
   Module 1  (Prompting)         -> Summarizing raw data into concise text
   Module 4  (RAG)               -> Structure-aware retrieval of historical incidents
   Module 5/6 (Agent + Tools)    -> Reasoning over live KPI/alarm/topology via tool calling
-  Module 7  (Skill)             -> The 4-layer diagnostic RCA procedure (SKILL.md)
-  Module 8  (MCP)               -> Standardized tool primitives
-  Module 9  (Human-in-the-Loop) -> Strict approval gate before create_ticket fires
+  Module 8  (Skill)             -> The 4-layer diagnostic RCA procedure (SKILL.md)
+  Module 9  (MCP)               -> Standardized tool primitives
+  Module 10 (Human-in-the-Loop) -> Strict approval gate before create_ticket fires
 
 Pipeline: Detect -> Retrieve -> Diagnose -> Draft
 

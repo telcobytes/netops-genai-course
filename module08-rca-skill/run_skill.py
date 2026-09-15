@@ -1,5 +1,5 @@
 """
-run_skill.py — Module 7 hands-on: executing a portable Skill bundle in Python
+run_skill.py — Module 8 hands-on: executing a portable Skill bundle in Python
 
 Demonstrates how modern agent architectures ingest an external Skill (SKILL.md):
 1. Loads the standardized domain instructions and 4-layer diagnostic procedure from SKILL.md.

@@ -1,5 +1,5 @@
 """
-mcp_client.py — Module 8 hands-on: connect to mcp_server.py as an MCP client
+mcp_client.py — Module 9 hands-on: connect to mcp_server.py as an MCP client
 
 This plays the HOST + CLIENT side of the architecture: it starts mcp_server.py
 as a subprocess, speaks MCP to it over stdio, lists the tools & resources it exposes,

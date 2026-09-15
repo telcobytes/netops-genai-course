@@ -1,4 +1,4 @@
-# Module 7 — The Telecom RCA Skill
+# Module 8 — The Telecom RCA Skill
 
 This folder is a portable "Skill" bundle: instructions (`SKILL.md`) + tools
 (`tools.py`), packaged once so any compatible agent can load it instead of

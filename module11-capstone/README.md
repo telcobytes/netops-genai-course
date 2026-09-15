@@ -1,4 +1,4 @@
-# Module 10 — Capstone: The Autonomous NOC Copilot
+# Module 11 — Capstone: The Autonomous NOC Copilot
 
 The culmination of the course: chaining every prior module into a single autonomous triage pipeline for `CELL-031A`.
 

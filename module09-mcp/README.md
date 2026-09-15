@@ -1,4 +1,4 @@
-# Module 8 — Model Context Protocol (MCP)
+# Module 9 — Model Context Protocol (MCP)
 
 This module implements the Model Context Protocol (MCP) using the official MCP Python SDK.
 

@@ -1,4 +1,4 @@
-# Module 9 — Evaluation, Observability & Tracing
+# Module 10 — Evaluation, Observability & Tracing
 
 This module implements quantitative regression testing and observability for telecom AI agents before they touch live alarms.
 

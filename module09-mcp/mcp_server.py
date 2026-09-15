@@ -1,5 +1,5 @@
 """
-mcp_server.py — Module 8 hands-on: expose the NOC tools via MCP
+mcp_server.py — Module 9 hands-on: expose the NOC tools via MCP
 
 Requires the official MCP Python SDK:
     pip install mcp

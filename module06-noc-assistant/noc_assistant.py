@@ -7,7 +7,7 @@ decides which to call and with what arguments, and returns a structured request
 that WE execute (the model never runs anything itself).
 
 create_ticket is the one tool with a real side effect — it always requires a
-human "y/n" confirmation before it actually fires (Module 9's human-in-the-loop
+human "y/n" confirmation before it actually fires (Module 10's human-in-the-loop
 rule, previewed here).
 
 Run:
