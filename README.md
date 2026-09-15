@@ -84,7 +84,7 @@ Every script can be run directly from the **repository root** without changing d
 |---|---|---|
 | **01** | *First API call — the 3-line pattern* | `python module01-summarizer/gemini_quickstart.py` |
 | **01** | Incident Summarizer | `python module01-summarizer/summarizer.py` |
-| **02** | Deep Research (No-Code) | *(Explore `data/module2_notebooklm_sample_doc.md` in NotebookLM)* |
+| **02** | Deep Research (No-Code) | *(no code by design — see [`module02-nocode/`](module02-nocode/))* |
 | **03** | Structured Anomaly Explainer | `python module03-anomaly-explainer/anomaly_explainer.py CELL-031A` |
 | **04** | Semantic RAG Grounding | `python module04-rag/rag_pipeline.py` |
 | **05** | Hand-Rolled ReAct Agent | `python module05-react-loop/react_agent.py` |
@@ -98,13 +98,18 @@ Every script can be run directly from the **repository root** without changing d
 
 ### Notebooks (Modules 1–5)
 
-The first half runs in Google Colab with zero install — see [`notebooks/README.md`](notebooks/README.md)
-for the launch badges. From Module 6 on, the course moves to files on your machine, because tool
-schemas, Skills, MCP servers and eval suites *are* files.
+Each of those five modules keeps its Colab notebook **inside its own module folder**
+next to the script — `module04-rag/04_rag.ipynb`, and so on. One folder per module, so
+there is no second tree to cross-reference. See [`LABS.md`](LABS.md) for the launch
+badges and the API-key setup.
+
+From Module 6 on, the course moves to files on your machine, because tool schemas,
+Skills, MCP servers and eval suites *are* files.
 
 ### Checkpoints
 
-Three short projects with a `check.py` that prints PASS or FAIL. Try them before reading the solutions.
+Three graded self-tests — `starter.py` has the TODOs, `check.py` prints PASS or FAIL,
+`solution.py` is for after you have tried. 15–25 minutes each.
 
 | After module | Checkpoint | Run |
 |---|---|---|
