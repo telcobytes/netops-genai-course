@@ -13,12 +13,36 @@ equivalents are commented below each function if you'd rather use those instead.
 Setup:
     pip install google-genai
     export GEMINI_API_KEY="..."          # get one free at aistudio.google.com
+
+Self-check:
+    python data/llm_client.py            # which models your key can actually use
+    python data/llm_client.py --call     # ...and one real call to prove it
 """
 
 import json
+import logging
 import os
 import sys
 import uuid
+
+
+class _DropAFCAdvisory(logging.Filter):
+    """google-genai logs an advisory about automatic function calling on every
+    tool-enabled call. It is not an error and there is nothing for a student to
+    fix, but it prints above the output and reads like one. Drop just that line.
+    """
+
+    def filter(self, record):
+        return "automatic function calling" not in record.getMessage().lower()
+
+
+def _silence_afc_advisory():
+    names = set(logging.root.manager.loggerDict) | {
+        "google_genai.models", "google_genai", "google.genai.models",
+    }
+    for name in names:
+        if "genai" in name:
+            logging.getLogger(name).addFilter(_DropAFCAdvisory())
 
 _client = None
 
@@ -39,11 +63,101 @@ def _get_client():
             print("=" * 65 + "\n")
             sys.exit(1)
         from google import genai
+        _silence_afc_advisory()   # after the import, so its loggers exist
         _client = genai.Client()  # reads GEMINI_API_KEY from the environment
     return _client
 
 
-DEFAULT_MODEL = os.environ.get("COURSE_MODEL", "gemini-2.5-flash")
+# ---------------------------------------------------------------------------
+# Which model we call
+# ---------------------------------------------------------------------------
+# Google retires models on its own schedule, and it closes a model to NEW keys
+# before the published shutdown date. In September 2026 `gemini-2.5-flash` —
+# which this course originally pinned — started returning
+#     404 NOT_FOUND: This model ... is no longer available to new users
+# for keys created after the cutoff, while the docs still listed it as stable.
+# Every new student has a new key, so a hard-pinned model is a trap.
+#
+# So: an ordered list of Flash-tier models that are on Gemini's free tier, and
+# a client that walks down it when the one it asked for has been retired. You
+# override the whole thing with COURSE_MODEL if you want a specific model:
+#     export COURSE_MODEL="gemini-3.8-flash"
+MODEL_CANDIDATES = [
+    "gemini-3.6-flash",        # Google's own recommended replacement for 2.5-flash
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.5-flash",
+    "gemini-3.5-flash-lite",
+    "gemini-2.5-flash",        # last, for older keys where it still works
+]
+
+# Set COURSE_MODEL to force one model and disable the fallback entirely.
+COURSE_MODEL = os.environ.get("COURSE_MODEL")
+DEFAULT_MODEL = COURSE_MODEL or MODEL_CANDIDATES[0]
+
+_resolved = None      # the model that worked last, so we stop re-probing
+_retired = set()      # models this key has been told it cannot use
+
+
+def _model_order():
+    if COURSE_MODEL:
+        return [COURSE_MODEL]
+    order = [_resolved] if _resolved else []
+    order += [m for m in MODEL_CANDIDATES if m != _resolved and m not in _retired]
+    return order
+
+
+def _is_retired(exc):
+    """True when the error means 'this model is gone', not 'your call was bad'."""
+    msg = str(exc).lower()
+    return ("404" in msg or "not_found" in msg) and (
+        "no longer available" in msg or "not found" in msg or "model" in msg
+    )
+
+
+def _generate(client, model, contents, config):
+    """client.models.generate_content, with one safeguard: if the model has been
+    retired, move to the next candidate rather than dying with a traceback."""
+    global _resolved
+    if model:                       # caller named a model explicitly — respect it
+        return client.models.generate_content(
+            model=model, contents=contents, config=config,
+        )
+    tried = []
+    for candidate in _model_order():
+        try:
+            response = client.models.generate_content(
+                model=candidate, contents=contents, config=config,
+            )
+            if candidate != _resolved:
+                if tried:
+                    print("[llm_client] not available to this key: "
+                          f"{', '.join(tried)} — using {candidate} instead.")
+                _resolved = candidate
+            return response
+        except Exception as exc:
+            if not _is_retired(exc):
+                raise
+            _retired.add(candidate)
+            tried.append(candidate)
+    _no_model_left(tried)
+
+
+def _no_model_left(tried):
+    print("\n" + "=" * 65)
+    print("[ERROR] None of the course's models are available to your API key.")
+    print("=" * 65)
+    print("Tried: " + ", ".join(tried))
+    print("\nGoogle retires models faster than a recorded course can be re-cut,")
+    print("so this is expected eventually and it is a one-line fix.")
+    print("\n1. See what your key can actually use:")
+    print("     python data/llm_client.py")
+    print("\n2. Pick a Flash model from that list and pin it:")
+    print("     export COURSE_MODEL=\"<the model id>\"")
+    print("\nNothing else in the course needs to change — every module reads")
+    print("this file, so one environment variable fixes all of them.")
+    print("=" * 65 + "\n")
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -176,11 +290,7 @@ def call_llm(messages, model=None, json_mode=False):
     if json_mode:
         config.response_mime_type = "application/json"
 
-    response = client.models.generate_content(
-        model=model or DEFAULT_MODEL,
-        contents=contents,
-        config=config,
-    )
+    response = _generate(client, model, contents, config)
     return response.text
 
     # --- OpenAI equivalent ---
@@ -220,9 +330,7 @@ def call_llm_tools(messages, tools, model=None):
     config = types.GenerateContentConfig(
         system_instruction=system_instruction, tools=gemini_tools,
     )
-    response = client.models.generate_content(
-        model=model or DEFAULT_MODEL, contents=contents, config=config,
-    )
+    response = _generate(client, model, contents, config)
 
     candidate = response.candidates[0]
     text_parts, tool_calls = [], []
@@ -253,3 +361,38 @@ def parse_json_response(text):
         raise ValueError(
             f"Expected valid JSON from the model but got: {text!r}"
         ) from e
+
+
+if __name__ == "__main__":
+    # `python data/llm_client.py` is the course's self-check. Run it whenever a
+    # lab fails in a way that looks like it is about the model rather than your
+    # code. It makes no billable call unless you pass --call.
+    print("Model candidates, in the order this file tries them:")
+    for m in MODEL_CANDIDATES:
+        print(f"    {m}")
+    if COURSE_MODEL:
+        print(f"\nCOURSE_MODEL is set to {COURSE_MODEL!r}, so only that one is used.")
+    else:
+        print(f"\nCOURSE_MODEL is not set, so the default is {DEFAULT_MODEL!r}.")
+
+    print("\nModels your key can see that can generate text:")
+    client = _get_client()
+    visible = []
+    for m in client.models.list():
+        actions = getattr(m, "supported_actions", None) or []
+        if not actions or "generateContent" in actions:
+            name = m.name.split("/", 1)[-1]
+            visible.append(name)
+            print(f"    {name}")
+    if not visible:
+        print("    (none returned — check that GEMINI_API_KEY is the right key)")
+    else:
+        usable = [m for m in MODEL_CANDIDATES if m in visible]
+        print("\nOf the course's candidates, your key can see: "
+              + (", ".join(usable) if usable else "NONE"))
+        if not usable:
+            print("Pick a Flash model from the list above and set COURSE_MODEL to it.")
+
+    if "--call" in sys.argv:
+        print("\nMaking one real call to confirm end to end...")
+        print(call_llm([{"role": "user", "content": "Reply with the word ready."}]))

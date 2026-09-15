@@ -25,7 +25,7 @@ client = genai.Client()
 
 # 2. Call the model with live telecom telemetry
 response = client.models.generate_content(
-    model="gemini-2.5-flash",
+    model="gemini-3.6-flash",
     contents="""Cell CELL-031A at 08:45 AM:
 - PRB utilization: 91.8%
 - RRC drop rate: 7.6% (threshold: 5%)
