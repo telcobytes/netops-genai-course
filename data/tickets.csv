@@ -1,0 +1,6 @@
+ticket_id,opened_at,site_id,category,summary,status
+TCK-4471,2026-09-08T14:02:00Z,SITE-031,Congestion,Customers in the SITE-031 area reporting slow data speeds during evening peak hours for the past three days,Open
+TCK-4455,2026-09-07T09:44:00Z,SITE-022,Voice Quality,Intermittent VoLTE call drops reported by field team near SITE-022,Open
+TCK-4432,2026-09-05T18:20:00Z,SITE-014,Transmission,"Brief service blip at SITE-014, resolved after transmission link auto-recovered",Closed
+TCK-4398,2026-09-02T11:15:00Z,SITE-031,Congestion,Recurring complaints of buffering/slow video near SITE-031 during a weekly local market event,Closed
+TCK-4380,2026-08-29T07:30:00Z,SITE-022,Hardware,Field technician flagged aging RRU at SITE-022 nearing end-of-life,Open

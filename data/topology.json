@@ -1,0 +1,30 @@
+{
+  "sites": [
+    {
+      "site_id": "SITE-014",
+      "region": "North",
+      "vendor": "VendorA",
+      "cells": [
+        {"cell_id": "CELL-014A", "tech": "5G-NR", "sector": 1, "planned_capacity_users": 200, "neighbors": ["CELL-014B", "CELL-031A"]},
+        {"cell_id": "CELL-014B", "tech": "5G-NR", "sector": 2, "planned_capacity_users": 200, "neighbors": ["CELL-014A"]}
+      ]
+    },
+    {
+      "site_id": "SITE-022",
+      "region": "North",
+      "vendor": "VendorB",
+      "cells": [
+        {"cell_id": "CELL-022A", "tech": "4G-LTE", "sector": 1, "planned_capacity_users": 180, "neighbors": ["CELL-031A"]}
+      ]
+    },
+    {
+      "site_id": "SITE-031",
+      "region": "North",
+      "vendor": "VendorA",
+      "cells": [
+        {"cell_id": "CELL-031A", "tech": "5G-NR", "sector": 1, "planned_capacity_users": 150, "neighbors": ["CELL-014A", "CELL-022A"]}
+      ]
+    }
+  ],
+  "notes": "SITE-031/CELL-031A has a lower planned_capacity_users than its neighbors — relevant context for explaining the Module 3/5/10 congestion scenario: a local event or neighbor-cell outage could be pushing more users onto an already smaller cell."
+}
