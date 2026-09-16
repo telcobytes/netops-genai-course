@@ -176,18 +176,30 @@ class _ToolCallFunction:
 
 
 class _ToolCall:
-    def __init__(self, call_id, name, args_dict):
+    def __init__(self, call_id, name, args_dict, thought_signature=None):
         self.id = call_id
         self.function = _ToolCallFunction(name, json.dumps(args_dict))
+        # Gemini 3.x thinking models attach an opaque `thought_signature` to each
+        # function_call part, and REQUIRE it back, byte for byte, when that turn
+        # is replayed in the conversation history. Drop it and the next request
+        # fails with 400 INVALID_ARGUMENT:
+        #     "Function call is missing a thought_signature in functionCall parts"
+        # It is provider-specific and meaningless to the modules, so it rides
+        # along here rather than appearing in the OpenAI-shaped interface.
+        self.thought_signature = thought_signature
 
 
 class _NormalizedMessage:
     """Mimics the shape of an OpenAI chat-completion message object closely
     enough that noc_assistant.py and noc_copilot.py need zero changes."""
 
-    def __init__(self, content, tool_calls):
+    def __init__(self, content, tool_calls, raw_content=None):
         self.content = content
         self.tool_calls = tool_calls or None
+        # The provider's own Content object for this turn. Replaying it verbatim
+        # preserves thought signatures and any future per-part metadata Google
+        # adds, which reconstructing from name+args cannot.
+        self.raw_content = raw_content
 
 
 def _messages_to_gemini(messages):
@@ -202,15 +214,27 @@ def _messages_to_gemini(messages):
 
     for m in messages:
         if isinstance(m, _NormalizedMessage):
-            # A previous assistant turn that made tool call(s)
+            # A previous assistant turn that made tool call(s). Replay the
+            # provider's own Content when we have it — that keeps the thought
+            # signatures Gemini 3.x demands back, and anything else it attached.
+            if getattr(m, "raw_content", None) is not None and m.raw_content.parts:
+                raw_contents.append(m.raw_content)
+                continue
+            # Hand-built message (the capstone does this): rebuild, carrying the
+            # signature across when the caller preserved one.
             parts = []
             if m.content:
                 parts.append(types.Part(text=m.content))
             for tc in m.tool_calls or []:
-                parts.append(types.Part(function_call=types.FunctionCall(
-                    name=tc.function.name, args=json.loads(tc.function.arguments)
-                )))
-            raw_contents.append(types.Content(role="model", parts=parts))
+                parts.append(types.Part(
+                    function_call=types.FunctionCall(
+                        name=tc.function.name,
+                        args=json.loads(tc.function.arguments),
+                    ),
+                    thought_signature=getattr(tc, "thought_signature", None),
+                ))
+            if parts:   # Gemini rejects a Content with no parts at all
+                raw_contents.append(types.Content(role="model", parts=parts))
             continue
 
         role = m.get("role")
@@ -244,7 +268,11 @@ def _messages_to_gemini(messages):
     # model made several parallel tool calls in Module 6/11).
     merged = []
     for content in raw_contents:
-        is_fn_response = all(getattr(p, "function_response", None) for p in content.parts)
+        # `all([])` is True, so an empty parts list would masquerade as a
+        # function-response turn and get merged into the previous one.
+        is_fn_response = bool(content.parts) and all(
+            getattr(p, "function_response", None) for p in content.parts
+        )
         if (
             merged
             and is_fn_response
@@ -332,17 +360,36 @@ def call_llm_tools(messages, tools, model=None):
     )
     response = _generate(client, model, contents, config)
 
-    candidate = response.candidates[0]
+    candidate = response.candidates[0] if response.candidates else None
+    content = getattr(candidate, "content", None) if candidate else None
+    if content is None or not content.parts:
+        # The model returned nothing usable — a safety stop, or it ran out of
+        # output tokens mid-thought. Say so instead of raising AttributeError on
+        # NoneType, which tells a student nothing.
+        reason = getattr(candidate, "finish_reason", None) if candidate else None
+        return _NormalizedMessage(
+            f"[no content returned by the model (finish_reason={reason}). "
+            f"Try a shorter question, or raise the output token limit.]",
+            [],
+        )
+
     text_parts, tool_calls = [], []
-    for part in candidate.content.parts:
+    for part in content.parts:
         if getattr(part, "text", None):
             text_parts.append(part.text)
         fc = getattr(part, "function_call", None)
         if fc:
             call_id = f"{fc.name}::{uuid.uuid4().hex[:6]}"
-            tool_calls.append(_ToolCall(call_id, fc.name, dict(fc.args)))
+            tool_calls.append(_ToolCall(
+                call_id, fc.name, dict(fc.args or {}),
+                thought_signature=getattr(part, "thought_signature", None),
+            ))
 
-    return _NormalizedMessage("\n".join(text_parts) if text_parts else None, tool_calls)
+    return _NormalizedMessage(
+        "\n".join(text_parts) if text_parts else None,
+        tool_calls,
+        raw_content=content,
+    )
 
     # --- OpenAI equivalent ---
     # from openai import OpenAI
