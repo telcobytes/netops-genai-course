@@ -190,9 +190,33 @@ def constrained_category(evidence, runs=3, use_examples=True):
 
 
 def _tally(answers):
-    """How many of these are strings the rest of the course can branch on?"""
-    valid = sum(1 for a in answers if a in FAULT_DOMAINS)
-    return valid, len(set(answers))
+    """Conformance and self-agreement — deliberately NOT correctness.
+
+    `in_taxonomy` counts strings the rest of the course can branch on. That is a
+    statement about SHAPE. It says nothing about whether the answer is true, and
+    conflating the two is the mistake this script exists to expose.
+
+    `modal_n` is how often the rung agreed with itself. A rung can be perfectly
+    stable and perfectly wrong, and on a healthy cell it is.
+    """
+    in_taxonomy = sum(1 for a in answers if a in FAULT_DOMAINS)
+    modal, modal_n = Counter(answers).most_common(1)[0] if answers else ("", 0)
+    return in_taxonomy, len(set(answers)), modal, modal_n
+
+
+def _show(answers, runs, listed=False):
+    """Print a rung's answers, then its conformance line."""
+    if listed:
+        for i, a in enumerate(answers, 1):
+            print(f"      run {i:>2}: {_flat(a)}")
+    else:
+        for a, n in Counter(answers).most_common():
+            flag = "" if a in FAULT_DOMAINS else "   <- NOT IN THE TAXONOMY"
+            print(f"      {_flat(a, 46):<48} x{n}{flag}")
+    in_tax, distinct, modal, modal_n = _tally(answers)
+    extra = f", {distinct} distinct strings" if listed else ""
+    print(f"      -> {in_tax}/{runs} in the taxonomy{extra}")
+    return in_tax, modal, modal_n
 
 
 # --- 3. structured output, enforced at both levels ---------------------------
@@ -276,45 +300,60 @@ if __name__ == "__main__":
         print(f"({runs * 3} model calls. The free tier is rate-limited, so give "
               f"it a minute.)")
 
-    print(f"\n  RUNG 1  loose  ·  no taxonomy named, no format asked for")
+    print("\n  RUNG 1  loose  ·  no taxonomy named, no format asked for")
     rung1 = loose_category(evidence, runs=runs)
-    for i, answer in enumerate(rung1, 1):
-        print(f"      run {i:>2}: {_flat(answer)}")
-    v1, d1 = _tally(rung1)
-    print(f"      -> {v1}/{runs} usable by code, {d1} distinct strings")
+    v1, _, _ = _show(rung1, runs, listed=True)
 
-    print(f"\n  RUNG 2  taxonomy named  ·  no worked examples")
+    print("\n  RUNG 2  taxonomy named  ·  no worked examples")
     rung2 = constrained_category(evidence, runs=runs, use_examples=False)
-    for answer, n in Counter(rung2).most_common():
-        flag = "" if answer in FAULT_DOMAINS else "   <- NOT IN THE TAXONOMY"
-        print(f"      {_flat(answer, 46):<48} x{n}{flag}")
-    v2, _ = _tally(rung2)
-    print(f"      -> {v2}/{runs} usable by code")
+    v2, modal2, n2 = _show(rung2, runs)
 
-    print(f"\n  RUNG 3  taxonomy + two worked examples")
+    print("\n  RUNG 3  taxonomy + two worked examples")
     rung3 = constrained_category(evidence, runs=runs, use_examples=True)
-    for answer, n in Counter(rung3).most_common():
-        flag = "" if answer in FAULT_DOMAINS else "   <- NOT IN THE TAXONOMY"
-        print(f"      {_flat(answer, 46):<48} x{n}{flag}")
-    v3, _ = _tally(rung3)
-    print(f"      -> {v3}/{runs} usable by code")
+    v3, modal3, n3 = _show(rung3, runs)
 
-    print("\n  WHAT EACH RUNG BOUGHT")
+    print("\n  WHAT EACH RUNG BOUGHT  (conformance — shape, not truth)")
     print(f"      naming the taxonomy :  {v1}/{runs} -> {v2}/{runs}"
           f"   ({v2 - v1:+d})")
     print(f"      adding the examples : {v2:>2}/{runs} -> {v3}/{runs}"
           f"   ({v3 - v2:+d})")
-    if v3 - v2 <= 0 < v2 - v1:
-        print("\n      Read that honestly. On this cell, with this model, today,")
-        print("      naming the four domains did the work and the worked examples")
-        print("      added nothing measurable. That is a result, not a failure —")
-        print("      and it is one you could only get by measuring. You would")
-        print("      otherwise have paid for those examples in every prompt,")
-        print("      forever, and never known.")
-        print(f"\n      Before you generalise it: {runs} runs is a small sample and")
-        print("      this is an easy case — one obvious bucket. Examples earn")
-        print("      their keep on ambiguous ones. Try --runs=10 and a healthy")
-        print("      cell before you decide what you believe.")
+    print("\n  SELF-AGREEMENT  (a rung can be perfectly stable and perfectly wrong)")
+    print(f"      rung 2: {n2}/{runs} on {modal2}")
+    print(f"      rung 3: {n3}/{runs} on {modal3}")
+    if modal2 != modal3:
+        print("      ^ the examples did not change how OFTEN it agreed with")
+        print("        itself. They changed WHAT it agreed on. Those are very")
+        print("        different interventions and only one of them is progress.")
+
+    healthy = not kpis["thresholds_crossed"]
+    if healthy:
+        print(f"\n  CORRECTNESS — read this before you celebrate a "
+              f"{runs}/{runs}")
+        print(f"      The answer key for {cell_id} is EMPTY. Nothing crossed.")
+        print("      So the correct answer is \"no fault\" — and NO member of")
+        print("      the taxonomy says that. All four are faults.")
+        print(f"\n      in the taxonomy : {v3}/{runs}")
+        print(f"      actually correct : 0/{runs}    <- by construction")
+        print("\n      Every schema-conformant answer above is false, the Literal")
+        print("      passed all of them, and Pydantic would too. The constraint")
+        print("      did not merely fail to help: it removed the model's ability")
+        print("      to say the true thing. Rung 1 could say \"nothing is wrong\".")
+        print("      Rungs 2 and 3 were forbidden from saying it.")
+        print("\n      json_mode buys parseable. Pydantic buys WELL-FORMED.")
+        print("      Neither one buys true. A validator cannot save you from a")
+        print("      taxonomy with no word for \"fine\" — and an agent wired this")
+        print("      way opens a ticket on every healthy cell in the network.")
+        print("\n      The fix is your exercise. See solution_no_fault.py once")
+        print("      you have tried it.")
+    elif v3 - v2 <= 0 < v2 - v1:
+        print(f"\n      On {cell_id}, naming the four domains did the work and the")
+        print("      worked examples added nothing measurable. That is a result,")
+        print("      not a failure, and it is one you could only get by measuring.")
+        print("      You would otherwise have paid for those examples in every")
+        print("      prompt, forever, and never known.")
+        print(f"\n      Before you generalise: {runs} runs is a small sample, and")
+        print("      this cell has one obvious bucket. Run CELL-022A — the")
+        print("      healthy one — before you decide what you believe.")
 
     label = "with examples" if use_examples else "examples REMOVED"
     print(f"\nSTRUCTURED OUTPUT, validated ({label})")
@@ -329,14 +368,22 @@ if __name__ == "__main__":
 
     print(
         "\nYour turn:\n"
-        f"  1. python {os.path.basename(__file__)} {cell_id} --runs=10\n"
-        "     Three samples per rung is a demo. Ten is closer to evidence.\n"
-        "     Write down what each rung bought. You will want it in Module 10,\n"
-        "     where the same question gets asked with a proper harness.\n"
-        f"  2. python {os.path.basename(__file__)} CELL-022A --runs=10\n"
-        "     A healthy cell — a harder, more ambiguous case, because nothing\n"
-        "     is obviously wrong. If the examples are ever going to earn their\n"
-        "     keep, it is here rather than on the textbook congestion case.\n"
-        "  3. Add `confidence: float = Field(ge=0, le=1)` to AnomalyReport and\n"
+        f"  1. python {os.path.basename(__file__)} CELL-022A --runs=10\n"
+        "     The healthy cell. Watch ten validated, schema-conformant, wrong\n"
+        "     answers go past. Run this one before anything else.\n"
+        "\n"
+        "  2. THE FIX — give the taxonomy a word for \"fine\":\n"
+        "       a) add \"NO_FAULT_DETECTED\" to the FaultDomain Literal\n"
+        "       b) tell the prompt when to use it\n"
+        "     Re-run CELL-022A. Then re-run CELL-031A to check you have not\n"
+        "     broken the case that already worked. Two lines of code.\n"
+        "     Stuck, or want to compare? python solution_no_fault.py\n"
+        "\n"
+        f"  3. python {os.path.basename(__file__)} {cell_id} --runs=10\n"
+        "     Three samples per rung is a demo; ten is closer to evidence.\n"
+        "     Write down what each rung bought — Module 10 asks the same\n"
+        "     question with a proper harness and you will want the comparison.\n"
+        "\n"
+        "  4. Add `confidence: float = Field(ge=0, le=1)` to AnomalyReport and\n"
         "     update the prompt. Watch what happens when you forget the prompt."
     )

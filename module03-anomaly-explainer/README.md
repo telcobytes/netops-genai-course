@@ -101,6 +101,16 @@ Two levels of enforcement, and you want both:
 | `json_mode=True` | the API returns something that **parses** | your keys. It sets the response MIME type; it passes no schema. A model can hand you perfectly valid JSON with entirely different fields in it. |
 | `AnomalyReport` (Pydantic) | the JSON **means what you asked for** — right fields, right types, `Literal` enum, length bounds on the summary | nothing about whether the content is *true*. That is Module 10's job. |
 
+That last cell is not a disclaimer, and the healthy cell in **Your turn** is where you find
+that out. Run `CELL-022A` and you get ten fault classifications on a cell where nothing is
+wrong — every one conformant, every one validated, every one false. `json_mode` buys
+parseable. Pydantic buys **well-formed**. Neither buys *true*.
+
+Worse, the constraint is what causes it. All four domains are faults, so a conformant answer
+on a healthy cell is wrong by construction, and the `Literal` that protects you from an
+invented category also forbids the model from reporting the truth. **A validator cannot save
+you from a taxonomy with no word for "fine."**
+
 Asking nicely gets JSON most of the time. Most of the time is fine for prose and
 useless for anything your code parses.
 
@@ -149,20 +159,43 @@ asks the model anything. That is what makes this an exercise rather than a demo.
 
 ## Your turn
 
-1. **`python anomaly_explainer.py CELL-031A --runs=10`** — three samples per rung is a
+1. **`python anomaly_explainer.py CELL-022A --runs=10`** — the healthy cell. Run this one
+   first. Ten fault classifications on a cell where nothing is wrong: PRB 57%, setup
+   success 98.7%, drops 1.3%, throughput flat, answer key empty. Every one of them passes
+   the `Literal`. Every one is false.
+
+   Look at which rung got it right. The loose prompt — the one this module spends two
+   slides criticising — said *"Normal Operation, no anomaly"* ten times out of ten. It was
+   unusable by code and correct. The constrained rungs were usable by code and wrong.
+
+   **Why:** all four domains are faults. There is no member meaning "nothing is wrong", so
+   on a healthy cell a schema-conformant answer is *guaranteed* to be false. The constraint
+   did not fail to help — it removed the model's ability to say the true thing. An agent
+   wired this way opens a ticket on every healthy cell in the network.
+
+2. **Fix it.** Give the taxonomy a word for "fine":
+
+   - add `"NO_FAULT_DETECTED"` to the `FaultDomain` `Literal` (`FAULT_DOMAINS` follows on
+     its own — that is what declaring it once buys you)
+   - tell the prompt when to use it. A member the prompt never mentions is a member the
+     model will not reach for, so adding it to the enum alone just moves the failure.
+
+   Re-run CELL-022A. Then re-run **CELL-031A**, because a fix that repairs the healthy cell
+   by making the model timid on the broken one has moved the failure rather than removed
+   it. That regression check is the half people skip.
+
+   Stuck, or want to compare? **`python solution_no_fault.py`** runs both cells before and
+   after, side by side, and scores correctness against the answer key.
+
+   The rule is worth more than the patch: **a classifier with no null class will always
+   classify.** Before you constrain a model to a fixed set, ask what it should say when
+   none of them apply.
+
+3. **`python anomaly_explainer.py CELL-031A --runs=10`** — three samples per rung is a
    demo, ten is closer to evidence. Write down what each rung bought. You will want that
    number in Module 10, where the same question gets asked with a real harness.
 
-2. **`python anomaly_explainer.py CELL-022A --runs=10`** — a healthy cell. The answer key
-   is empty; the question is whether the model agrees. A prompt that only ever says
-   "something is wrong" is not analysing anything.
-
-   It is also the harder case for the ladder, because nothing is obviously wrong. If the
-   worked examples are ever going to beat the bare domain list, it is here rather than on
-   textbook congestion — so compare the two cells before you decide what you believe about
-   few-shot.
-
-3. **Add `confidence: float = Field(ge=0, le=1)`** to `AnomalyReport` and update the
+4. **Add `confidence: float = Field(ge=0, le=1)`** to `AnomalyReport` and update the
    prompt. Then try it *without* updating the prompt, and watch Pydantic catch the
    mismatch in microseconds, for free, instead of three modules later inside an agent
    loop where it looks like a tool bug.
