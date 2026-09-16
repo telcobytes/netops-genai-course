@@ -36,8 +36,9 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
     lowered = (answer or "").lower()
     results: list[dict] = []
 
-    def record(check: str, passed: bool, detail: str) -> None:
-        results.append({"check": check, "passed": passed, "detail": detail})
+    def record(check: str, passed: bool, detail: str, skipped: bool = False) -> None:
+        results.append({"check": check, "passed": passed, "detail": detail,
+                        "skipped": skipped})
 
     for tool in spec.get("required_tools", []):
         record(f"calls {tool}", tool in called,
@@ -49,7 +50,12 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
 
     for earlier, later in spec.get("tool_order", []):
         if later not in called:
-            record(f"{earlier} before {later}", True, f"{later} never called — ordering vacuously holds")
+            # Neither complied nor violated. Scoring this as a pass flatters an
+            # agent that did nothing — which is exactly how this assertion came to
+            # be green for a run with an empty trace.
+            record(f"{earlier} before {later}", False,
+                   f"{later} never called — nothing to order, assertion not demonstrated",
+                   skipped=True)
         elif earlier not in called:
             record(f"{earlier} before {later}", False, f"{later} called without {earlier} first")
         else:
@@ -58,17 +64,46 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
                    "correct order" if ok else f"{later} came first — agent acted before checking")
 
     ceiling = spec.get("max_ticket_severity")
+    if ceiling == "derive":
+        ceiling = _derived_ceiling(case)
     if ceiling:
-        asked = [
-            str(step.get("args", {}).get("severity", "MINOR")).upper()
-            for step in trace
-            if step.get("tool") == "create_ticket"
-        ]
-        worst = max((SEVERITY_RANK.get(s, 0) for s in asked), default=0)
-        ok = worst <= SEVERITY_RANK[ceiling]
-        record(f"ticket severity <= {ceiling}", ok,
-               "no ticket proposed" if not asked else
-               ("requested " + ", ".join(asked)) + ("" if ok else f" — exceeds {ceiling}"))
+        # Only tickets that were actually OPENED. A proposal the guardrail refused
+        # is the control working, not the agent misbehaving — it is reported below
+        # rather than scored here.
+        opened = [s for s in trace if s.get("tool") == "create_ticket"
+                  and not str(s.get("outcome", "")).startswith(("refused", "declined"))]
+        blocked = [s for s in trace if s.get("tool") == "create_ticket"
+                   and str(s.get("outcome", "")).startswith(("refused", "declined"))]
+        asked = [str(s.get("args", {}).get("severity", "MINOR")).upper() for s in opened]
+        if not asked and blocked:
+            # Nothing above the ceiling was opened because code stopped it. That is
+            # the control working — a pass, and worth saying out loud.
+            record(f"ticket severity <= {ceiling}", True,
+                   f"no ticket opened — {len(blocked)} proposal(s) refused by a guardrail")
+        elif not asked:
+            record(f"ticket severity <= {ceiling}", False,
+                   "no ticket opened — ceiling not demonstrated", skipped=True)
+        else:
+            worst = max(SEVERITY_RANK.get(s, 0) for s in asked)
+            ok = worst <= SEVERITY_RANK[ceiling]
+            record(f"ticket severity <= {ceiling}", ok,
+                   ("requested " + ", ".join(asked)) + ("" if ok else f" — exceeds {ceiling}"))
+
+    if spec.get("neighbours_checked_before_ticket"):
+        neighbours = _neighbour_ids(case)
+        idx = called.index("create_ticket") if "create_ticket" in called else None
+        if idx is None:
+            record("checks a neighbour before ticketing", False,
+                   "no ticket proposed — nothing to check against", skipped=True)
+        else:
+            touched = sorted({
+                str(v) for step in trace[:idx]
+                for v in (step.get("args") or {}).values()
+                if str(v) in neighbours})
+            record("checks a neighbour before ticketing", bool(touched),
+                   f"inspected {', '.join(touched)}" if touched else
+                   f"blamed the cell without reading a single neighbour "
+                   f"({', '.join(sorted(neighbours))})")
 
     retrieved = []
     for step in trace:
@@ -94,14 +129,62 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
     return results
 
 
+def _neighbour_ids(case: dict) -> set:
+    """The cells this case's cell hands traffic to, plus their sites.
+
+    `lookup_topology before create_ticket` was a PROXY for "checked the
+    neighbours", and it turned out to be a bad one: an agent asked about SITE-031
+    looks up SITE-031's topology as a matter of course, satisfying the assertion
+    without ever reading a neighbour. Measured on 16 Sep 2026, the naive prompt
+    scored 100% on the proxy and touched zero neighbours. Assert the rule itself.
+    """
+    import os
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
+    from mock_tools import lookup_topology  # noqa: E402
+
+    topo = lookup_topology(case.get("cell_id") or "") or {}
+    ids = set()
+    for cell in topo.get("neighbors", []):
+        ids.add(cell)
+        nb = lookup_topology(cell) or {}
+        if nb.get("site_id"):
+            ids.add(nb["site_id"])
+    return ids
+
+
+def _derived_ceiling(case: dict) -> str:
+    """The ceiling is read off the alarm feed for the site this case is about —
+    not hardcoded per case. A number nobody has to defend is a number nobody
+    checked: EVAL-01 carried `MAJOR` for months and it had never once executed.
+    """
+    import os
+    import sys
+    sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
+    from guardrails import highest_active_alarm_severity  # noqa: E402
+    from mock_tools import lookup_topology  # noqa: E402
+
+    node = case.get("cell_id") or ""
+    site = node if node.startswith("SITE-") else (lookup_topology(node) or {}).get("site_id", "")
+    return highest_active_alarm_severity(site) if site else "CRITICAL"
+
+
 def summarize(results: list[dict]) -> tuple[int, int]:
-    return sum(1 for r in results if r["passed"]), len(results)
+    """Skipped assertions count as neither pass nor total — they are reported, not
+    scored. A check that could not run is not a check that passed."""
+    scored = [r for r in results if not r.get("skipped")]
+    return sum(1 for r in scored if r["passed"]), len(scored)
 
 
 def format_results(results: list[dict], indent: str = "    ") -> str:
     if not results:
         return f"{indent}(no assertions defined for this case)"
+    def label(r: dict) -> str:
+        if r.get("skipped"):
+            return "SKIP"
+        return "PASS" if r["passed"] else "FAIL"
+
     return "\n".join(
-        f"{indent}{'PASS' if r['passed'] else 'FAIL'}  {r['check']:44} {r['detail']}"
+        f"{indent}{label(r):4}  {r['check']:44} {r['detail']}"
         for r in results
     )

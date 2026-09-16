@@ -30,41 +30,78 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "module04-rag"))
+sys.path.append(os.path.join(os.path.dirname(__file__), "..", "module06-noc-assistant"))
 from llm_client import call_llm  # noqa: E402
 from rag_pipeline import draft_grounded_rca  # noqa: E402
 from assertions import check_assertions, format_results, summarize  # noqa: E402
+from tracing import collect, traced  # noqa: E402
 
 GOLDEN_SET_PATH = os.path.join(
     os.path.dirname(__file__), "..", "data", "eval_golden_set.json"
 )
 
 
-def load_trace(case_id: str) -> list:
-    """Read tool calls for this case from tracing.py's JSONL log, if present.
-    Returns [] when there's no trace — tier 1 then reports vacuous passes rather
-    than crashing, which is the right behaviour for a first live run.
+def _run_agent(case: dict, trace: list) -> str:
+    """Grade the Module 6 agent.
+
+    Its tool dispatcher is wrapped so every call the agent makes lands in the
+    trace — including a ticket it PROPOSES and a human then declines, which is
+    what the severity assertion is actually about.
     """
-    path = os.path.join(os.path.dirname(__file__), "trace_log.jsonl")
-    if not os.path.exists(path):
-        return []
-    steps = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                entry = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if entry.get("case_id") not in (None, case_id):
-                continue
-            steps.append({
-                "tool": entry.get("tool") or entry.get("function") or "",
-                "args": entry.get("kwargs") or entry.get("args") or {},
-                "retrieved": entry.get("retrieved", []),
-            })
-    return steps
+    import noc_assistant
+
+    original = noc_assistant._dispatch_tool
+    prior = os.environ.get("AUTO_APPROVE")
+    # The eval measures the agent's decisions, not the human's. Leaving the gate
+    # interactive would stall a non-interactive run; the proposal is recorded
+    # either way, so approving does not change any tier-1 verdict.
+    os.environ["AUTO_APPROVE"] = "1"
+
+    def _dispatch(name, args):
+        entry = {"tool": name, "args": args}
+        trace.append(entry)
+        result = original(name, args)
+        # Record the OUTCOME, so an assertion can tell a ticket that was opened from
+        # one a guardrail refused. Without this the two look identical in the trace.
+        if isinstance(result, dict) and result.get("status"):
+            entry["outcome"] = result["status"]
+        return result
+
+    noc_assistant._dispatch_tool = _dispatch
+    try:
+        return noc_assistant.run_noc_assistant(
+            f"{case['scenario']} What is going on, and what should we do?",
+            scope=_case_scope(case))
+    finally:
+        noc_assistant._dispatch_tool = original
+        if prior is None:
+            os.environ.pop("AUTO_APPROVE", None)
+        else:
+            os.environ["AUTO_APPROVE"] = prior
+
+
+def _case_scope(case: dict):
+    """The blast radius for this case: the site the question is about."""
+    from mock_tools import lookup_topology
+    node = case.get("cell_id") or ""
+    if node.startswith("SITE-"):
+        return [node]
+    site = (lookup_topology(node) or {}).get("site_id")
+    return [site] if site else None
+
+
+def _instrumented_tools():
+    """Wrap the tools rag_pipeline calls so their invocations land in the trace.
+
+    The same @traced decorator Module 10 teaches, applied to the functions the
+    grader asks questions about. Without this, tier 1 has nothing of this run to
+    read — and it used to read tracing.py's leftover demo log instead.
+    """
+    import rag_pipeline
+    for name in ("get_cell_kpis", "get_active_alarms", "lookup_topology"):
+        fn = getattr(rag_pipeline, name)
+        if not getattr(fn, "__wrapped__", None):
+            setattr(rag_pipeline, name, traced(fn))
 
 
 def load_golden_set():
@@ -85,8 +122,20 @@ MOCK_TRACES = {
         {"tool": "create_ticket", "args": {"summary": "Overflow congestion on CELL-031A",
                                            "site_id": "SITE-031", "severity": "MAJOR"}},
     ],
+    # EVAL-02's trace is the REAL failing run of 16 Sep 2026, recorded verbatim:
+    # asked about a within-tolerance MINOR alarm on CELL-022A, the agent read the
+    # neighbour and filed CRITICAL against SITE-031. Kept as a fixture so tier 1
+    # goes red offline — a suite where everything passes is not a suite.
     "EVAL-02": [
         {"tool": "get_active_alarms", "args": {"site_id": "SITE-022"}},
+        {"tool": "get_cell_kpis", "args": {"cell_id": "CELL-022A"}},
+        {"tool": "lookup_topology", "args": {"node_id": "CELL-022A"}},
+        {"tool": "get_active_alarms", "args": {"site_id": "SITE-031"}},
+        {"tool": "create_ticket", "args": {"site_id": "SITE-031", "severity": "CRITICAL",
+                                           "category": "Radio Access Network / Congestion",
+                                           "summary": "Severe cell congestion on CELL-031A "
+                                                      "impacting neighbouring SITE-022"},
+         "outcome": "Open"},
     ],
     "EVAL-03": [
         {"tool": "get_cell_kpis", "args": {"cell_id": "CELL-031A", "window_minutes": 180},
@@ -172,12 +221,25 @@ def run_eval(use_judge: bool = False, use_mock: bool = False):
 
         if use_mock:
             answer = MOCK_ANSWERS.get(case["case_id"], "")
+            trace = MOCK_TRACES.get(case["case_id"], [])
             print(f"\n--- Model Answer (Offline Benchmark Sample) ---\n{answer}")
         else:
-            answer = draft_grounded_rca("CELL-031A", case["scenario"])
+            # Grade what THIS run did. The trace is collected in memory and never
+            # read back from disk, so a log left behind by an earlier run — or by
+            # tracing.py's own demo — cannot be mistaken for this one.
+            # A case names what it grades. EVAL-01 and EVAL-02 assert on tool order
+            # and ticket severity — things only an agent with create_ticket can do.
+            # EVAL-03 asserts on retrieval, which is the drafter's job. Grading every
+            # case against one subject is how EVAL-01's flagship assertion came to be
+            # scored against a program that has no create_ticket.
+            _instrumented_tools()
+            with collect(case["case_id"]) as trace:
+                if case.get("subject") == "agent":
+                    answer = _run_agent(case, trace)
+                else:
+                    answer = draft_grounded_rca(
+                        case.get("cell_id", "CELL-031A"), case["scenario"], trace=trace)
             print(f"\n--- Agent's Answer (Live Model Generation) ---\n{answer}")
-
-        trace = MOCK_TRACES.get(case["case_id"], []) if use_mock else load_trace(case["case_id"])
         checks = check_assertions(case, answer, trace)
         hits, total = summarize(checks)
         passed = total > 0 and hits == total

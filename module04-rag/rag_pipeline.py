@@ -22,7 +22,7 @@ from collections import Counter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm  # noqa: E402
-from mock_tools import get_cell_kpis, get_active_alarms  # noqa: E402
+from mock_tools import get_cell_kpis, get_active_alarms, lookup_topology  # noqa: E402
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 KB_DIR = os.path.join(DATA_DIR, "knowledge_base")
@@ -182,12 +182,32 @@ def retrieve(query, chunks, k=2, prefer_api=True):
 
 
 # ---------- Step 4: Augment ----------
-def draft_grounded_rca(cell_id: str, question: str) -> str:
+def draft_grounded_rca(cell_id: str, question: str, trace: list | None = None) -> str:
+    """Draft an RCA grounded in retrieved prior incidents.
+
+    `trace`, when given, is appended to with a record of what this function did.
+    A property you want to assert on has to be recorded by the code that does it:
+    run_eval's `must_retrieve` check reads this, and before it existed the check
+    could only ever fail, because nothing told it which documents had been used.
+    """
     kpis = get_cell_kpis(cell_id)
-    alarms = get_active_alarms(cell_id.split("-")[0] if "-" in cell_id else None)
+
+    # Resolve the SITE from topology rather than splitting the cell ID. The old
+    # `cell_id.split("-")[0]` produced the literal string "CELL" for CELL-031A —
+    # an unknown site, which returned [] — so this drafter had never once been
+    # shown an alarm, and said so in its RCAs while three alarms were active.
+    topology = lookup_topology(cell_id) or {}
+    site_id = topology.get("site_id") or (cell_id if str(cell_id).startswith("SITE-") else None)
+    alarms = get_active_alarms(site_id)
 
     chunks = load_and_chunk_knowledge_base()
     retrieved = retrieve(question, chunks, k=2)
+    if trace is not None:
+        trace.append({
+            "tool": "retrieve",
+            "args": {"query": question, "k": 2},
+            "retrieved": [c["source"] for c in retrieved],
+        })
     retrieved_text = "\n\n".join(
         f"[From {c['source']} — {c.get('context', '')}]\n{c.get('excerpt', c['text'])}"
         for c in retrieved

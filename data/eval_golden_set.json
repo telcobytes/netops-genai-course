@@ -3,6 +3,8 @@
   "cases": [
     {
       "case_id": "EVAL-01",
+      "subject": "agent",
+      "cell_id": "CELL-031A",
       "scenario": "CELL-031A has climbing PRB utilization, falling RRC setup success rate, and rising RRC drop rate over the last 45 minutes. Active users on the cell have grown well past its planned capacity.",
       "available_context": [
         "kpis.csv rows for CELL-031A (08:00-09:00)",
@@ -15,7 +17,8 @@
         "name": "Neighbor-before-blame",
         "required_tools": [
           "get_cell_kpis",
-          "lookup_topology"
+          "lookup_topology",
+          "create_ticket"
         ],
         "tool_order": [
           [
@@ -23,15 +26,18 @@
             "create_ticket"
           ]
         ],
-        "max_ticket_severity": "MAJOR",
+        "max_ticket_severity": "derive",
         "answer_must_mention": [
           "neighbor"
         ],
-        "rationale": "The agent must check neighbour cells before blaming CELL-031A. Tool ORDER is the assertion — lookup_topology has to happen before any ticket is proposed."
+        "rationale": "Neighbour-before-blame, asserted directly: before proposing a ticket the agent must have READ a neighbour — its KPIs or its alarms. The old assertion checked that lookup_topology appeared before create_ticket, which is a proxy, and a bad one: measured on 16 Sep 2026 the naive prompt scored 100% on it while touching zero neighbours. The severity ceiling is derived from the alarm feed for this case's site.",
+        "neighbours_checked_before_ticket": true
       }
     },
     {
       "case_id": "EVAL-02",
+      "subject": "agent",
+      "cell_id": "CELL-022A",
       "scenario": "SITE-022's CELL-022A shows a MINOR VOLTE_CALL_DROP_RATE_WARNING alarm, described as 'slightly above baseline, within tolerance.' There is also an open ticket (TCK-4455) about intermittent VoLTE call drops at the same site.",
       "available_context": [
         "alarms.csv row ALM-9005",
@@ -42,20 +48,17 @@
       "assertions": {
         "name": "Alarm-storm resistance",
         "forbidden_tools": [],
-        "max_ticket_severity": "MINOR",
-        "answer_must_not_mention": [
-          "urgent",
-          "escalat",
-          "page the on-call"
-        ],
+        "max_ticket_severity": "derive",
         "answer_must_mention": [
           "TCK-4455"
         ],
-        "rationale": "A within-tolerance MINOR alarm must not become a CRITICAL ticket. Severity is now a real field on create_ticket, so this is a hard check rather than a judgement call."
+        "rationale": "A within-tolerance MINOR alarm must not become a CRITICAL ticket. The ceiling is DERIVED from the alarm feed: SITE-022's worst active alarm is MINOR, so MINOR is the ceiling. Scope is enforced separately — reading CELL-031A's KPIs does not authorise filing against SITE-031."
       }
     },
     {
       "case_id": "EVAL-03",
+      "subject": "drafter",
+      "cell_id": "CELL-031A",
       "scenario": "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 during evening peak hours for the past three days, with no specific alarm cited yet.",
       "available_context": [
         "tickets.csv row TCK-4471",
@@ -76,7 +79,7 @@
         "answer_must_mention": [
           "event"
         ],
-        "rationale": "Two prior incidents look similar and have different causes. This asserts the retriever picked the recurring-event pattern over the neighbour-outage pattern — the distinction RAG exists to make."
+        "rationale": "Two prior incidents look similar and have different causes. This asserts the retriever picked the recurring-event pattern over the neighbour-outage pattern — the distinction RAG exists to make. Graded against the Module 4 drafter, because retrieval is what the drafter does."
       }
     }
   ]
