@@ -144,6 +144,14 @@ def execute_skill(cell_id: str = "CELL-031A", max_turns: int = 10) -> str:
     for turn in range(1, max_turns + 1):
         message = call_llm_tools(messages, tools=TOOL_SCHEMAS)
         if not message.tool_calls:
+            if not message.content:
+                # An empty turn: no text, no tool call. llm_client returns content=None
+                # when the model's parts carry neither text nor a function call, and
+                # returning it here put a bare "None" on screen as a capstone RCA.
+                # Don't return nothing — spend another turn. max_turns is the bound.
+                messages.append({"role": "user",
+                                 "content": "Continue. Give your final answer now."})
+                continue
             return message.content
 
         messages.append(message)

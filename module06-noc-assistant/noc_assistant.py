@@ -188,6 +188,14 @@ def _run(question: str, max_turns: int) -> str:
         message = call_llm_tools(messages, tools=TOOL_SCHEMAS)
 
         if not message.tool_calls:
+            if not message.content:
+                # An empty turn: no text, no tool call. llm_client returns content=None
+                # when the model's parts carry neither text nor a function call, and
+                # returning it here put a bare "None" on screen as a capstone RCA.
+                # Don't return nothing — spend another turn. max_turns is the bound.
+                messages.append({"role": "user",
+                                 "content": "Continue. Give your final answer now."})
+                continue
             return message.content
 
         # Record the assistant's tool-call request, then execute each one

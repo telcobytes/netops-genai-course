@@ -101,6 +101,10 @@ def run_noc_copilot():
 
         prior_context = retrieve_context(alarm)
         rca = diagnose_and_draft(alarm, prior_context, rca_procedure)
+        if not rca:
+            rca = (f"{RED}[no RCA produced for {alarm['alarm_id']} — the agent ended without "
+                   f"an answer. Re-run. If it repeats, the context has outgrown the output "
+                   f"budget.]{RESET}")
 
         print(f"\n{BOLD}{GREEN}--- Final Verified RCA for {alarm['alarm_id']} ---{RESET}\n{rca}")
 
