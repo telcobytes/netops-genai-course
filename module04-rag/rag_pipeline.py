@@ -5,7 +5,7 @@ Implements the four RAG steps from the lecture — chunk, embed, retrieve, augme
 against the knowledge_base/ incident write-ups, then uses the retrieved context to
 draft a grounded RCA instead of letting the model guess.
 
-Retrieval uses real semantic dense embeddings via Gemini's API (text-embedding-004)
+Retrieval uses real semantic dense embeddings via Gemini
 by default if GEMINI_API_KEY is present, with an automatic graceful fallback to an
 offline bag-of-words keyword vectorizer if offline.
 
@@ -63,13 +63,16 @@ def _cosine_similarity(a, b):
 
 
 def embed_with_gemini_api(texts):
-    """Production embeddings via Gemini API (text-embedding-004).
-    Uses the exact same GEMINI_API_KEY already configured in your environment.
+    """Production dense embeddings, via llm_client like everything else.
+
+    This used to reach for the SDK directly and pin `text-embedding-004`, which
+    Google retired — and because the caller below swallows embedding errors, the
+    lab kept "working" on keyword vectors while claiming semantic retrieval.
+    Embeddings now go through llm_client.embed_texts(), which walks a candidate
+    list the same way chat models do.
     """
-    from google import genai
-    client = genai.Client()
-    result = client.models.embed_content(model="text-embedding-004", contents=texts)
-    return [e.values for e in result.embeddings]
+    from llm_client import embed_texts  # noqa: E402
+    return embed_texts(texts)
 
 
 # ---------- Step 3: Retrieve ----------
@@ -81,7 +84,7 @@ def retrieve(query, chunks, k=2, prefer_api=True):
 
     if prefer_api and api_key_available:
         try:
-            # Dense semantic retrieval (768-dimensional embeddings)
+            # Dense semantic retrieval — dimensionality pinned in llm_client.EMBEDDING_DIMENSIONS
             chunk_texts = [c["text"] for c in chunks]
             chunk_vectors = embed_with_gemini_api(chunk_texts)
             query_vector = embed_with_gemini_api([query])[0]
@@ -92,7 +95,18 @@ def retrieve(query, chunks, k=2, prefer_api=True):
             )
             return [chunk for chunk, _ in scored[:k]]
         except Exception as e:
-            print(f"[RAG notice: Gemini embedding API error ({e}); using offline keyword fallback]")
+            # Falling back to keyword vectors is right when there is no key.
+            # It is NOT right when a key is present and embeddings broke — this
+            # lab's whole point is dense semantic retrieval, so say so loudly
+            # rather than quietly doing something else and looking fine.
+            print("\n" + "!" * 70)
+            print("[RAG WARNING] Dense embeddings FAILED and this run fell back to")
+            print("              offline keyword matching. Retrieval below is BAG OF")
+            print("              WORDS, not semantic — results will differ from the")
+            print("              lecture.")
+            print(f"              Reason: {e}")
+            print("              Fix:    python data/llm_client.py --embeddings")
+            print("!" * 70 + "\n")
 
     # Offline Bag-of-Words fallback (runs without API keys)
     all_token_lists = [_tokenize(c["text"]) for c in chunks] + [_tokenize(query)]
@@ -147,7 +161,7 @@ if __name__ == "__main__":
     chunks = load_and_chunk_knowledge_base()
     print(f"Loaded {len(chunks)} chunks from {KB_DIR}\n")
 
-    mode = "Gemini Dense Embeddings (text-embedding-004)" if os.environ.get("GEMINI_API_KEY") else "Offline Keyword Vectorizer"
+    mode = "Gemini dense embeddings" if os.environ.get("GEMINI_API_KEY") else "Offline keyword vectorizer"
     print(f"Retrieval Engine: {mode}")
 
     top_matches = retrieve(question, chunks, k=2)

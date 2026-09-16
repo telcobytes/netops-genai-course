@@ -15,8 +15,9 @@ Setup:
     export GEMINI_API_KEY="..."          # get one free at aistudio.google.com
 
 Self-check:
-    python data/llm_client.py            # which models your key can actually use
-    python data/llm_client.py --call     # ...and one real call to prove it
+    python data/llm_client.py              # which models your key can actually use
+    python data/llm_client.py --call       # ...and one real call to prove it
+    python data/llm_client.py --embeddings # which embedding models it can use
 """
 
 import json
@@ -158,6 +159,109 @@ def _no_model_left(tried):
     print("this file, so one environment variable fixes all of them.")
     print("=" * 65 + "\n")
     sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
+# Embeddings — the same retirement problem, and the same shape of answer
+# ---------------------------------------------------------------------------
+# Module 4 embeds the knowledge base to do dense semantic retrieval. Embedding
+# models get retired exactly like generation models do: on 16 Sep 2026
+# `text-embedding-004` — which this course had pinned — started returning
+#     404 NOT_FOUND: models/text-embedding-004 is not found for API version
+#     v1beta, or is not supported for embedContent
+# So embeddings live here now, behind the same candidate list, rather than
+# reaching for the SDK from rag_pipeline.py. Override with COURSE_EMBEDDING_MODEL.
+# Newest stable first, oldest last — the opposite of how this course was bitten
+# twice, where the pinned model was the one that aged out.
+EMBEDDING_CANDIDATES = [
+    "gemini-embedding-2",
+    "gemini-embedding-001",
+    "text-embedding-005",
+    "text-embedding-004",      # retired 16 Sep 2026; kept last for older keys
+]
+
+COURSE_EMBEDDING_MODEL = os.environ.get("COURSE_EMBEDDING_MODEL")
+
+# Pinned so retrieval behaviour does not shift underneath the lecture when the
+# model changes: gemini-embedding-* default to 3072 dimensions, the older
+# text-embedding-* models to 768. Asking for 768 explicitly keeps every
+# candidate producing the same shape, and keeps the deck's "768-dimensional"
+# claim true. Cosine similarity normalizes anyway, so truncation is safe here.
+EMBEDDING_DIMENSIONS = 768
+
+_resolved_embedding = None
+_retired_embeddings = set()
+
+
+def _discover_embedding_model(client):
+    """Last resort: ask the API what it actually has. Beats a hardcoded list
+    that a future retirement will invalidate all over again."""
+    try:
+        for m in client.models.list():
+            actions = [str(a) for a in (getattr(m, "supported_actions", None) or [])]
+            if any("embed" in a.lower() for a in actions):
+                return m.name.split("/", 1)[-1]
+    except Exception:
+        pass
+    return None
+
+
+def embed_texts(texts):
+    """Embed a list of strings, returning a list of float vectors.
+
+    Walks EMBEDDING_CANDIDATES when a model has been retired, then asks the API
+    what it has. Raises with a readable instruction block when nothing works —
+    deliberately loud, because a silent fall back to keyword matching would let
+    a lab claim semantic retrieval while doing something else entirely.
+    """
+    global _resolved_embedding
+    client = _get_client()
+
+    if COURSE_EMBEDDING_MODEL:
+        order = [COURSE_EMBEDDING_MODEL]
+    else:
+        order = [_resolved_embedding] if _resolved_embedding else []
+        order += [m for m in EMBEDDING_CANDIDATES
+                  if m != _resolved_embedding and m not in _retired_embeddings]
+
+    from google.genai import types
+    cfg = types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIMENSIONS)
+
+    tried = []
+    for candidate in order:
+        try:
+            result = client.models.embed_content(
+                model=candidate, contents=texts, config=cfg)
+            if candidate != _resolved_embedding:
+                if tried:
+                    print("[llm_client] embedding models not available to this key: "
+                          f"{', '.join(tried)} — using {candidate} instead.")
+                _resolved_embedding = candidate
+            return [e.values for e in result.embeddings]
+        except Exception as exc:
+            if not _is_retired(exc):
+                raise
+            _retired_embeddings.add(candidate)
+            tried.append(candidate)
+
+    discovered = _discover_embedding_model(client)
+    if discovered and discovered not in tried:
+        result = client.models.embed_content(
+            model=discovered, contents=texts, config=cfg)
+        print(f"[llm_client] none of the course's embedding models are available; "
+              f"discovered {discovered} on your key and used that.")
+        _resolved_embedding = discovered
+        return [e.values for e in result.embeddings]
+
+    raise RuntimeError(
+        "No embedding model available to this API key.\n"
+        + "Tried: " + (", ".join(tried) or "(none)") + "\n"
+        "Google retires embedding models the same way it retires chat models.\n"
+        "Find one your key can use:\n"
+        "    python data/llm_client.py --embeddings\n"
+        "then pin it:\n"
+        "    export COURSE_EMBEDDING_MODEL=\"<the model id>\"\n"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -439,6 +543,25 @@ if __name__ == "__main__":
               + (", ".join(usable) if usable else "NONE"))
         if not usable:
             print("Pick a Flash model from the list above and set COURSE_MODEL to it.")
+
+    if "--embeddings" in sys.argv:
+        print("\nEmbedding models your key can see:")
+        found = []
+        for m in client.models.list():
+            actions = [str(a) for a in (getattr(m, "supported_actions", None) or [])]
+            if any("embed" in a.lower() for a in actions):
+                name = m.name.split("/", 1)[-1]
+                found.append(name)
+                print(f"    {name}")
+        if not found:
+            print("    (none) — this key cannot embed at all.")
+        else:
+            usable = [m for m in EMBEDDING_CANDIDATES if m in found]
+            print("\nOf the course's embedding candidates, your key can see: "
+                  + (", ".join(usable) if usable else "NONE"))
+            if not usable:
+                print(f"Set COURSE_EMBEDDING_MODEL to one of the above, "
+                      f"e.g. export COURSE_EMBEDDING_MODEL=\"{found[0]}\"")
 
     if "--call" in sys.argv:
         print("\nMaking one real call to confirm end to end...")
