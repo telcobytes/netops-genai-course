@@ -161,6 +161,44 @@ def _no_model_left(tried):
     sys.exit(1)
 
 
+def resolve_model():
+    """The model id this key can actually use, for code that calls the SDK directly.
+
+    `call_llm` does not need this — `_generate` already walks MODEL_CANDIDATES when a
+    call comes back retired. This exists for the one file allowed to bypass the
+    wrapper, `module01-summarizer/gemini_quickstart.py`, which makes a raw
+    `generate_content()` call on purpose and would otherwise have to name a model
+    inline. A model name pinned in a module is the trap that killed `gemini-2.5-flash`
+    and `text-embedding-004`; this is how a module names a model without pinning one.
+
+    Asks the API which models this key can see and returns the first course candidate
+    among them, so a retired model is skipped *before* the call rather than after it
+    comes back 404 — which matters most in Module 1, the first lab a student runs.
+    """
+    if COURSE_MODEL:              # explicit override wins, same as everywhere else
+        return COURSE_MODEL
+    if _resolved:                 # a call already proved this one works
+        return _resolved
+
+    client = _get_client()
+    visible = []
+    try:
+        for m in client.models.list():
+            actions = getattr(m, "supported_actions", None) or []
+            if not actions or "generateContent" in actions:
+                visible.append(m.name.split("/", 1)[-1])
+    except Exception:
+        # Listing failed — offline, or a transient 5xx. Do not take down the first
+        # lab in the course over it: hand back the default and let the real call
+        # report whatever is actually wrong.
+        return DEFAULT_MODEL
+
+    for candidate in MODEL_CANDIDATES:
+        if candidate in visible:
+            return candidate
+    _no_model_left(MODEL_CANDIDATES)
+
+
 # ---------------------------------------------------------------------------
 # Embeddings — the same retirement problem, and the same shape of answer
 # ---------------------------------------------------------------------------
