@@ -31,9 +31,25 @@ SYSTEM_PROMPT = """You are a NOC assistant for NetOps Co. Use the available tool
 to investigate before answering. Always check KPIs and alarms for the cell/site in
 question, and check neighboring cells' topology before concluding the cell itself
 is at fault — a neighbor outage can push overflow traffic onto a healthy cell.
-Only call create_ticket after you have a clear root cause, and only if the user
-has approved it.
+
+When your investigation supports opening a ticket, CALL create_ticket. Do not ask
+permission in your answer first. A human approval gate is enforced in code around
+that tool, so calling it is a proposal, not an action — calling it is how you put
+the proposal in front of a person.
 """
+# Why the prompt no longer says "only if the user has approved it":
+#
+# That wording asked the MODEL to enforce the safety gate, which is exactly what
+# Module 10 tells you never to do — safety belongs at the architectural boundary,
+# in code, where the model does not get a vote. It also worked badly in both
+# directions. The agent obeyed by describing a ticket in prose and asking, so the
+# real gate in _dispatch_tool never ran, and nothing in the trace recorded the
+# agent's most consequential decision. Module 10's central assertion —
+# lookup_topology before create_ticket — had nothing to compare, because
+# create_ticket never appeared.
+#
+# Now the agent proposes by calling the tool, _dispatch_tool asks the human, and
+# the decision is visible in the trace whichever way the human answers.
 
 TOOL_SCHEMAS = [
     {
@@ -116,7 +132,13 @@ def _dispatch_tool(name: str, args: dict):
                 approved = False
 
         if not approved:
-            return {"status": "declined_by_human", "note": "Ticket was not created."}
+            # The agent's proposal is still a real, recorded event — the human
+            # said no to it. Tell the model plainly so it stops re-proposing.
+            return {
+                "status": "declined_by_human",
+                "note": "A human reviewed this proposal and declined it. "
+                        "Do not propose it again; summarise your findings instead.",
+            }
         try:
             return create_ticket(**args)
         except Exception as err:
@@ -136,7 +158,7 @@ def _dispatch_tool(name: str, args: dict):
         return {"error": f"Error executing {name}: {err}"}
 
 
-def run_noc_assistant(question: str, max_turns: int = 6) -> str:
+def run_noc_assistant(question: str, max_turns: int = 10) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},

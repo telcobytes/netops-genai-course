@@ -125,7 +125,7 @@ def _dispatch_tool(name: str, args: dict):
         return {"error": f"Tool execution failed: {err}"}
 
 
-def execute_skill(cell_id: str = "CELL-031A", max_turns: int = 6) -> str:
+def execute_skill(cell_id: str = "CELL-031A", max_turns: int = 10) -> str:
     skill_content = load_skill_instructions()
     system_prompt = (
         "You are an autonomous NetOps AI Assistant. You have been equipped with "

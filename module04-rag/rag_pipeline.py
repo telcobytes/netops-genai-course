@@ -29,17 +29,53 @@ KB_DIR = os.path.join(DATA_DIR, "knowledge_base")
 
 
 # ---------- Step 1: Structure-Aware Chunk ----------
+def _document_context(text):
+    """The title line and the site this document is about — the two facts that
+    identify every chunk in it."""
+    title, site = "", ""
+    for line in text.splitlines():
+        line = line.strip()
+        if not title and line.startswith("# "):
+            title = line[2:].strip()
+        if not site and line.lower().startswith("**site affected:**"):
+            site = line.split(":**", 1)[1].strip()
+        if title and site:
+            break
+    return " — ".join(p for p in (title, site) if p)
+
+
 def load_and_chunk_knowledge_base():
-    """Split each incident doc into section/paragraph-level chunks.
-    Preserves whole runbook steps and tables intact rather than slicing mid-trace.
+    """Split each incident doc into section/paragraph-level chunks, each one
+    carrying its document's title and site.
+
+    That header is not decoration. Splitting on blank lines puts
+    "**Site affected:** SITE-031" in one chunk and "customers reported slow data
+    speeds" in another, so no chunk contains both the symptom and the site it
+    happened at — and the retriever cannot match on a site ID that appears
+    nowhere near the text describing it. Module 10's EVAL-03 failed on exactly
+    this: a query about slow data speeds at SITE-031 during evening peak
+    retrieved the VoLTE incident instead, because it matched the *framing* of
+    the question ("a trouble ticket reports… no alarm cited") while the document
+    that actually described the symptoms had been cut away from its own name.
+
+    Prepending the context is the standard fix, and it is what "structure-aware"
+    has to mean: a chunk must carry enough of its document to be findable on its
+    own.
     """
     chunks = []
     for path in sorted(glob.glob(os.path.join(KB_DIR, "*.md"))):
         with open(path, encoding="utf-8") as f:
             text = f.read()
+        context = _document_context(text)
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
         for para in paragraphs:
-            chunks.append({"text": para, "source": os.path.basename(path)})
+            body = f"[{context}]\n{para}" if context else para
+            chunks.append({
+                "text": body,            # what gets embedded
+                "excerpt": para,         # the original paragraph, for display
+                "context": context,
+                "source": os.path.basename(path),
+            })
     return chunks
 
 
@@ -62,7 +98,7 @@ def _cosine_similarity(a, b):
     return dot / (norm_a * norm_b)
 
 
-def embed_with_gemini_api(texts):
+def embed_with_gemini_api(texts, task_type="RETRIEVAL_DOCUMENT"):
     """Production dense embeddings, via llm_client like everything else.
 
     This used to reach for the SDK directly and pin `text-embedding-004`, which
@@ -70,9 +106,21 @@ def embed_with_gemini_api(texts):
     lab kept "working" on keyword vectors while claiming semantic retrieval.
     Embeddings now go through llm_client.embed_texts(), which walks a candidate
     list the same way chat models do.
+
+    task_type: retrieval is asymmetric. The knowledge base is embedded as
+    RETRIEVAL_DOCUMENT and the question as RETRIEVAL_QUERY, because a short
+    question and a long passage are not the same kind of text and the model
+    encodes them differently when told which is which.
     """
     from llm_client import embed_texts  # noqa: E402
-    return embed_texts(texts)
+    return embed_texts(texts, task_type=task_type)
+
+
+# The knowledge base does not change between queries, and gemini-embedding-*
+# will not embed a batch — so embedding 24 chunks costs 24 calls. Do it once per
+# process and reuse. Without this, every retrieve() re-embeds the whole corpus,
+# which is the same shape of bug that made notebook 04 spend 29 calls on one query.
+_chunk_vector_cache = {}
 
 
 # ---------- Step 3: Retrieve ----------
@@ -86,8 +134,20 @@ def retrieve(query, chunks, k=2, prefer_api=True):
         try:
             # Dense semantic retrieval — dimensionality pinned in llm_client.EMBEDDING_DIMENSIONS
             chunk_texts = [c["text"] for c in chunks]
-            chunk_vectors = embed_with_gemini_api(chunk_texts)
-            query_vector = embed_with_gemini_api([query])[0]
+            cache_key = hash(tuple(chunk_texts))
+            if cache_key not in _chunk_vector_cache:
+                _chunk_vector_cache[cache_key] = embed_with_gemini_api(
+                    chunk_texts, "RETRIEVAL_DOCUMENT")
+            chunk_vectors = _chunk_vector_cache[cache_key]
+            query_vector = embed_with_gemini_api([query], "RETRIEVAL_QUERY")[0]
+
+            # zip() below truncates to the shorter list without saying so. If the
+            # embedding call ever returns fewer vectors than chunks, ranking would
+            # quietly happen over a handful of chunks — or one — and still return
+            # a plausible document. Refuse to rank rather than rank a subset.
+            if len(chunk_vectors) != len(chunks):
+                raise RuntimeError(
+                    f"embedded {len(chunk_vectors)} vectors for {len(chunks)} chunks")
 
             scored = sorted(
                 zip(chunks, chunk_vectors),
@@ -129,7 +189,8 @@ def draft_grounded_rca(cell_id: str, question: str) -> str:
     chunks = load_and_chunk_knowledge_base()
     retrieved = retrieve(question, chunks, k=2)
     retrieved_text = "\n\n".join(
-        f"[From {c['source']}]\n{c['text']}" for c in retrieved
+        f"[From {c['source']} — {c.get('context', '')}]\n{c.get('excerpt', c['text'])}"
+        for c in retrieved
     )
 
     prompt = f"""You are a NOC analyst drafting a root-cause analysis (RCA).
@@ -167,7 +228,7 @@ if __name__ == "__main__":
     top_matches = retrieve(question, chunks, k=2)
     print("\n--- Top retrieved chunks ---")
     for m in top_matches:
-        print(f"\n[{m['source']}]\n{m['text'][:200]}...")
+        print(f"\n[{m['source']}]\n{m.get('excerpt', m['text'])[:200]}...")
 
     if os.environ.get("GEMINI_API_KEY"):
         print("\n--- Grounded RCA (calls the LLM) ---\n")

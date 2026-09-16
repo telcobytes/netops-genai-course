@@ -206,13 +206,52 @@ def _discover_embedding_model(client):
     return None
 
 
-def embed_texts(texts):
-    """Embed a list of strings, returning a list of float vectors.
+_no_batch = set()          # models observed to return one vector for many inputs
+
+
+def _embed_call(client, model, texts, cfg):
+    """One embed_content call, with the count guaranteed to match the input.
+
+    Not every embedding model accepts a batch. Some return ONE embedding for a
+    list of many, and the caller in rag_pipeline zips chunks against vectors —
+    where zip() silently truncates to the shorter list. That turned 24 ranked
+    chunks into 1, so every query returned chunks[0] and retrieval stopped
+    ranking anything at all. It looked like it worked: two documents asked for,
+    one plausible document returned, no error anywhere.
+    """
+    def one(text):
+        return client.models.embed_content(
+            model=model, contents=[text], config=cfg).embeddings[0].values
+
+    if len(texts) == 1 or model in _no_batch:
+        return [one(t) for t in texts]
+
+    result = client.models.embed_content(model=model, contents=texts, config=cfg)
+    vectors = [e.values for e in result.embeddings]
+    if len(vectors) == len(texts):
+        return vectors
+
+    # This model will not batch. Remember that, so we stop wasting a call on it,
+    # then embed one at a time — slower, but a short vector list is a correctness
+    # bug and a slow loop is only a slow loop.
+    _no_batch.add(model)
+    return [one(t) for t in texts]
+
+
+def embed_texts(texts, task_type=None):
+    """Embed a list of strings, returning one vector per input string.
 
     Walks EMBEDDING_CANDIDATES when a model has been retired, then asks the API
     what it has. Raises with a readable instruction block when nothing works —
     deliberately loud, because a silent fall back to keyword matching would let
     a lab claim semantic retrieval while doing something else entirely.
+
+    task_type matters more than it looks. Retrieval is ASYMMETRIC: a short query
+    and a long passage are not the same kind of text, and Gemini's embedding
+    models encode them differently when told which is which. Pass
+    "RETRIEVAL_DOCUMENT" for the corpus and "RETRIEVAL_QUERY" for the question.
+    Leaving it unset embeds both the same way and measurably flattens the
+    ranking — which is the opposite of what Module 4 is trying to demonstrate.
     """
     global _resolved_embedding
     client = _get_client()
@@ -225,19 +264,19 @@ def embed_texts(texts):
                   if m != _resolved_embedding and m not in _retired_embeddings]
 
     from google.genai import types
-    cfg = types.EmbedContentConfig(output_dimensionality=EMBEDDING_DIMENSIONS)
+    cfg = types.EmbedContentConfig(
+        output_dimensionality=EMBEDDING_DIMENSIONS, task_type=task_type)
 
     tried = []
     for candidate in order:
         try:
-            result = client.models.embed_content(
-                model=candidate, contents=texts, config=cfg)
+            vectors = _embed_call(client, candidate, texts, cfg)
             if candidate != _resolved_embedding:
                 if tried:
                     print("[llm_client] embedding models not available to this key: "
                           f"{', '.join(tried)} — using {candidate} instead.")
                 _resolved_embedding = candidate
-            return [e.values for e in result.embeddings]
+            return vectors
         except Exception as exc:
             if not _is_retired(exc):
                 raise
@@ -246,12 +285,11 @@ def embed_texts(texts):
 
     discovered = _discover_embedding_model(client)
     if discovered and discovered not in tried:
-        result = client.models.embed_content(
-            model=discovered, contents=texts, config=cfg)
+        vectors = _embed_call(client, discovered, texts, cfg)
         print(f"[llm_client] none of the course's embedding models are available; "
               f"discovered {discovered} on your key and used that.")
         _resolved_embedding = discovered
-        return [e.values for e in result.embeddings]
+        return vectors
 
     raise RuntimeError(
         "No embedding model available to this API key.\n"
