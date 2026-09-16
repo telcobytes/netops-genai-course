@@ -24,3 +24,7 @@ measure_nondeterminism.py
 # load_trace() matched every entry to every case and graded one stale trace as
 # evidence for all three eval cases.
 module10-eval/trace_log.jsonl
+
+# Maintainer notes for Claude Code. Students clone this repo (notebook cell 2 does
+# git clone + git pull), and this file catalogues defects the course has shipped.
+CLAUDE.md
