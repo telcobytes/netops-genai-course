@@ -142,6 +142,13 @@ def get_active_alarms(site_id: Optional[str] = None) -> list[dict]:
     """
     rows = _load_csv("alarms.csv")
     if site_id:
+        # An unknown site used to return [] — indistinguishable from "this site is
+        # healthy". That is how a caller passing the wrong identifier got a
+        # confident all-clear instead of an error. Say so instead.
+        known = {r["site_id"] for r in rows} | {s["site_id"] for s in _load_json("topology.json")["sites"]}
+        if site_id not in known:
+            raise ValueError(
+                f"unknown site_id {site_id!r} — known sites: {', '.join(sorted(known))}")
         rows = [r for r in rows if r["site_id"] == site_id]
     return rows
 

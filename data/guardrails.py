@@ -19,7 +19,10 @@ model is a safety limit.
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
+import sys
 from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
@@ -74,6 +77,99 @@ class SetTxPowerArgs(_StrictArgs):
 class AdjustAntennaTiltArgs(_StrictArgs):
     cell_id: str = Field(pattern=CELL_ID_PATTERN)
     tilt_degrees: float = Field(ge=0.0, le=15.0)
+
+
+SEVERITY_RANK = {"MINOR": 1, "MAJOR": 2, "CRITICAL": 3}
+
+
+# ---------- Rule 1: declare the blast radius before the agent acts ----------
+# An investigation is opened ABOUT something. Everything the agent does with a
+# real side effect has to stay inside that. This is declared up front rather than
+# inferred from what the agent happened to look at — an agent that wanders to a
+# neighbouring site and reads its KPIs has not thereby been authorised to file
+# tickets against it.
+
+_SCOPE: Optional[set] = None
+
+
+def investigation_scope() -> Optional[set]:
+    return _SCOPE
+
+
+def set_investigation_scope(sites) -> None:
+    global _SCOPE
+    _SCOPE = {s for s in sites if s} if sites else None
+
+
+@contextlib.contextmanager
+def investigation(sites):
+    """Bound side effects to these sites for the duration of the block."""
+    global _SCOPE
+    prior = _SCOPE
+    set_investigation_scope(sites)
+    try:
+        yield
+    finally:
+        _SCOPE = prior
+
+
+# ---------- Rule 2: derive severity from the alarm feed, don't ask for it ----------
+
+def highest_active_alarm_severity(site_id: str) -> str:
+    """The worst active alarm on this site, or MINOR when nothing is alarming.
+
+    The ticket vocabulary and the alarm vocabulary are the same three words. That
+    is not a coincidence and it is the only defensible source for a ceiling: a
+    ticket more severe than every alarm that triggered it is asserting something
+    the evidence does not support. Before this existed, severity was chosen by the
+    model, steered by one sentence in a tool description, and checked only for
+    spelling.
+    """
+    sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+    from mock_tools import get_active_alarms  # noqa: E402
+
+    # Call the UNWRAPPED tool. A guardrail checking its own precondition is not an
+    # action the agent took, and recording it would put a call in the trace that
+    # the agent never made — in the module that teaches the trace is what it did.
+    fn = getattr(get_active_alarms, "__wrapped__", get_active_alarms)
+    try:
+        alarms = fn(site_id)
+    except ValueError:
+        return "MINOR"          # unknown site — nothing here supports escalation
+    worst = "MINOR"
+    for alarm in alarms:
+        sev = str(alarm.get("severity", "")).upper()
+        if SEVERITY_RANK.get(sev, 0) > SEVERITY_RANK[worst]:
+            worst = sev
+    return worst
+
+
+def check_ticket_proposal(args: dict, scope=None) -> tuple:
+    """Both rules, in code, before dispatch. Returns (allowed, reason).
+
+    Neither rule is a request to the model. That distinction is the whole module:
+    the tool schema already says "Match the severity to the evidence. Do not
+    escalate a within-tolerance signal" — and an agent asked about a MINOR alarm
+    on SITE-022 opened a CRITICAL ticket on SITE-031 anyway.
+    """
+    site = str(args.get("site_id") or "").strip()
+    asked = str(args.get("severity") or "MINOR").upper()
+
+    scope = investigation_scope() if scope is None else ({s for s in scope} if scope else None)
+    if scope and site not in scope:
+        return False, (
+            f"out of scope — this investigation covers {', '.join(sorted(scope))}, "
+            f"but the proposed ticket names {site or '(no site)'}. Reading a neighbour's "
+            f"KPIs does not authorise filing against it.")
+
+    if site:
+        ceiling = highest_active_alarm_severity(site)
+        if SEVERITY_RANK.get(asked, 0) > SEVERITY_RANK[ceiling]:
+            return False, (
+                f"severity {asked} exceeds the evidence — the worst active alarm on "
+                f"{site} is {ceiling}. Raise the alarm first if this is genuinely worse.")
+
+    return True, "in scope, and severity supported by the alarm feed"
 
 
 READ_ONLY_TOOLS = {"get_cell_kpis", "get_active_alarms", "lookup_topology"}

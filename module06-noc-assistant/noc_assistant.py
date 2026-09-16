@@ -20,6 +20,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm_tools  # noqa: E402
+import guardrails  # noqa: E402
 from mock_tools import (  # noqa: E402
     get_cell_kpis,
     get_active_alarms,
@@ -120,6 +121,18 @@ TOOL_SCHEMAS = [
 
 def _dispatch_tool(name: str, args: dict):
     if name == "create_ticket":
+        # Guardrails run BEFORE the human is asked. A person should never be shown a
+        # proposal that code can already prove is out of bounds — that is how an
+        # approval gate degrades into a rubber stamp.
+        allowed, reason = guardrails.check_ticket_proposal(args)
+        if not allowed:
+            print(f"\n  >>> GUARDRAIL REFUSED: {reason}")
+            return {
+                "status": "refused_by_guardrail",
+                "reason": reason,
+                "note": "Refused in code, before any human saw it. Re-propose within the "
+                        "investigation's scope and at a severity the alarm feed supports.",
+            }
         print(f"\n  >>> Agent wants to open a ticket: {args}")
         if os.environ.get("AUTO_APPROVE") == "1":
             print("      [AUTO_APPROVE=1 detected: automatically approving ticket creation]")
@@ -158,7 +171,14 @@ def _dispatch_tool(name: str, args: dict):
         return {"error": f"Error executing {name}: {err}"}
 
 
-def run_noc_assistant(question: str, max_turns: int = 10) -> str:
+def run_noc_assistant(question: str, max_turns: int = 10, scope=None) -> str:
+    """`scope` declares the blast radius: the site ids this investigation may file
+    tickets against. None leaves it unbounded, which is the Module 6 default."""
+    with guardrails.investigation(scope):
+        return _run(question, max_turns)
+
+
+def _run(question: str, max_turns: int) -> str:
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
