@@ -16,7 +16,7 @@ cd module03-anomaly-explainer
 
 python anomaly_explainer.py CELL-031A            # a real anomaly in the sample data
 python anomaly_explainer.py CELL-022A            # a healthy cell
-python anomaly_explainer.py CELL-031A --ablate   # the same run, few-shot examples removed
+python anomaly_explainer.py CELL-031A --no-examples   # the same run, few-shot examples removed
 ```
 
 Or open [`03_anomaly_explainer.ipynb`](03_anomaly_explainer.ipynb) in Colab. The two
@@ -50,6 +50,23 @@ TRANSPORT_BACKHAUL_JITTER   CORE_SIGNALING_REJECT
 
 Use these exact strings. `module07-workflow-patterns/01_prompt_chaining.py` branches on
 them, so a shortened name here silently fails validation four modules later.
+
+They are declared **once**, as a `Literal`, and the list the prompt interpolates is read
+back off it with `typing.get_args`. Spelling the four strings out in both places is the
+same two-sources-of-truth mistake as retyping a threshold: edit one, and the validator and
+the prompt quietly stop agreeing about what a legal answer is.
+
+**A note on the examples themselves**, because the choice is deliberate. Neither example is
+CELL-031A's answer, and both use only metrics the model is actually sent. An earlier version
+of this lab used *"PRB 94%, users 210 against planned capacity 150 → CAPACITY_PRB_EXHAUSTION"*
+— and CELL-031A is PRB 96.3% with 214 users against a planned capacity of 150. The example
+was the answer, two percent away, and it also quoted a figure (`planned_capacity_users`) that
+lives in `topology.json` and never reaches the model at all. Few-shot looked powerful when
+what it was really doing was matching a near neighbour.
+
+Examples teach the **shape** of the reasoning — which combination of KPIs points where. The
+domain list sets the **bounds**. Keep those jobs separate and the technique is doing what you
+say it is doing.
 
 ## 3. Structured output — and the distinction that matters
 
@@ -108,15 +125,21 @@ asks the model anything. That is what makes this an exercise rather than a demo.
 
 ## Your turn
 
-1. **`python anomaly_explainer.py CELL-022A`** — a healthy cell. The answer key is
+1. **`python anomaly_explainer.py CELL-031A --no-examples`** — drops the two worked
+   examples and changes nothing else. Run it four or five times and count how often the
+   category still validates. That number is what the examples bought you, measured on your
+   own data instead of asserted on a slide. Write it down; Module 10 does this properly,
+   with a harness.
+
+   Be clear about what the flag does **not** drop: the prompt still lists all four domains.
+   So you are measuring worked examples against a well-specified instruction, not against
+   nothing. If the count barely moves, that is a real and reportable result — it means the
+   instruction was carrying most of the weight, which is worth knowing before you spend
+   context on examples in production.
+
+2. **`python anomaly_explainer.py CELL-022A`** — a healthy cell. The answer key is
    empty; the question is whether the model agrees. A prompt that only ever says
    "something is wrong" is not analysing anything.
-
-2. **`python anomaly_explainer.py CELL-031A --ablate`** — drops the few-shot examples
-   and changes nothing else. Run it four or five times and count how often the category
-   still validates. That number is the argument for few-shot, measured on your own data
-   instead of asserted on a slide. Write it down; Module 10 does this properly, with a
-   harness.
 
 3. **Add `confidence: float = Field(ge=0, le=1)`** to `AnomalyReport` and update the
    prompt. Then try it *without* updating the prompt, and watch Pydantic catch the

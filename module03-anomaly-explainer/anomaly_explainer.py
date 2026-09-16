@@ -24,7 +24,7 @@ answer key you grade against. Tools compute. Agents reason.
 Run:
     python anomaly_explainer.py CELL-031A   # a real anomaly in the sample data
     python anomaly_explainer.py CELL-022A   # healthy cell
-    python anomaly_explainer.py CELL-031A --ablate   # drop the few-shot examples
+    python anomaly_explainer.py CELL-031A --no-examples   # drop the few-shot examples
 """
 
 import json
@@ -35,9 +35,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm, parse_json_response  # noqa: E402
 from mock_tools import THRESHOLDS, get_cell_kpis  # noqa: E402
 
+from typing import List, Literal, get_args  # noqa: E402  (stdlib — cannot fail)
+
 try:
     from pydantic import BaseModel, Field, ValidationError
-    from typing import List, Literal
 except ImportError:  # pragma: no cover
     raise SystemExit(
         "This lab needs pydantic.\n"
@@ -45,18 +46,47 @@ except ImportError:  # pragma: no cover
         "It is in requirements.txt; if you are outside the venv, activate it first."
     )
 
-# The four fault domains. This exact list is what module07-workflow-patterns/
-# 01_prompt_chaining.py branches on, so do not shorten the names here.
-FAULT_DOMAINS = [
+# The four fault domains, declared ONCE.
+#
+# This is the module's own "one number, one place" rule applied to itself. The
+# taxonomy used to be spelled out twice — here as a list, and again inside the
+# Literal below — which is exactly the two-sources-of-truth problem this lab
+# warns about. Edit one and the other goes quietly out of step.
+#
+# `get_args` reads the members back off the type, so the list cannot disagree
+# with the validator: there is only one place to edit.
+#
+# These exact strings are what module07-workflow-patterns/01_prompt_chaining.py
+# branches on, so do not shorten the names here.
+FaultDomain = Literal[
     "RADIO_ACCESS_INTERFERENCE",
     "CAPACITY_PRB_EXHAUSTION",
     "TRANSPORT_BACKHAUL_JITTER",
     "CORE_SIGNALING_REJECT",
 ]
+FAULT_DOMAINS = list(get_args(FaultDomain))
 
+# Two worked examples — and note what they deliberately are NOT: a near-copy of
+# the cell you are about to classify.
+#
+# They used to be. One of them read "PRB 94%, users 210 against planned capacity
+# 150 -> CAPACITY_PRB_EXHAUSTION", and CELL-031A is PRB 96.3% with 214 users
+# against a planned capacity of 150. The example WAS the answer, two percent
+# away. The model looked like it had learned a taxonomy when all it had done was
+# match its nearest neighbour. Both examples also quoted metrics the model is
+# never sent — backhaul RTT and planned capacity live nowhere in what
+# `_evidence` builds.
+#
+# So: both examples now use only metrics that actually reach the model, and
+# both show domains that are NOT the expected answer. Examples teach the SHAPE
+# of the reasoning — which combination of KPIs points where — while the domain
+# list in the prompt defines the space of legal answers. Form from the examples,
+# bounds from the list.
 FEW_SHOT_EXAMPLES = """\
-Example — PRB 45%, backhaul RTT 120ms above baseline -> TRANSPORT_BACKHAUL_JITTER
-Example — PRB 94%, users 210 against planned capacity 150 -> CAPACITY_PRB_EXHAUSTION
+Example — PRB 38%, setup success 88%, drop 6.1%, users 90 -> CORE_SIGNALING_REJECT
+  (setups failing with plenty of radio headroom — look past the air interface)
+Example — PRB 52%, throughput down 60%, drop 1.2%, users steady -> TRANSPORT_BACKHAUL_JITTER
+  (throughput collapses while the radio KPIs stay healthy — the bottleneck is behind the cell)
 """
 
 
@@ -70,12 +100,7 @@ class AnomalyReport(BaseModel):
 
     metrics_changed: List[str]
     thresholds_crossed: List[str]
-    fault_category: Literal[
-        "RADIO_ACCESS_INTERFERENCE",
-        "CAPACITY_PRB_EXHAUSTION",
-        "TRANSPORT_BACKHAUL_JITTER",
-        "CORE_SIGNALING_REJECT",
-    ]
+    fault_category: FaultDomain
     summary: str = Field(min_length=20, max_length=300)
 
 
@@ -117,16 +142,21 @@ def zero_shot_drift(evidence, runs=3):
 
 
 # --- 2. few-shot: taxonomy enforcement ---------------------------------------
-def few_shot_category(evidence, runs=3, ablate=False):
+def few_shot_category(evidence, runs=3, use_examples=True):
     """Same question, now with the buckets and two worked examples.
 
-    `ablate=True` drops the examples and keeps everything else. That is the
-    experiment: it turns "few-shot helps" from a claim into a number you
+    `use_examples=False` drops the examples and keeps everything else. That is
+    the experiment: it turns "few-shot helps" from a claim into a number you
     measured on your own data.
+
+    Be clear about what it does NOT drop. The first line still names all four
+    domains, so you are comparing examples against a well-specified instruction,
+    not against nothing. If the count barely moves, that is a real result and
+    worth saying out loud: the instruction was carrying most of the weight.
     """
     prompt = (
         f"Categorize into EXACTLY ONE of: {', '.join(FAULT_DOMAINS)}\n\n"
-        + ("" if ablate else FEW_SHOT_EXAMPLES + "\n")
+        + (FEW_SHOT_EXAMPLES + "\n" if use_examples else "")
         + f"READINGS: {evidence}\nReply with the domain name only."
     )
     return [
@@ -171,14 +201,14 @@ KPI SUMMARY:
 """
 
 
-def explain_anomaly(cell_id: str, ablate: bool = False) -> AnomalyReport:
+def explain_anomaly(cell_id: str, use_examples: bool = True) -> AnomalyReport:
     """The function the rest of the course would call. Returns a validated
     model, not a dict — so a caller cannot be handed a surprise."""
     _, evidence = _evidence(cell_id)
     prompt = PROMPT_TEMPLATE.format(
         thresholds=_threshold_text(),
         domains=", ".join(FAULT_DOMAINS),
-        examples="" if ablate else FEW_SHOT_EXAMPLES,
+        examples=FEW_SHOT_EXAMPLES if use_examples else "",
         evidence=evidence,
     )
     raw = call_llm([{"role": "user", "content": prompt}], json_mode=True)
@@ -189,7 +219,7 @@ def explain_anomaly(cell_id: str, ablate: bool = False) -> AnomalyReport:
 
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    ablate = "--ablate" in sys.argv
+    use_examples = "--no-examples" not in sys.argv
     cell_id = args[0] if args else "CELL-031A"
 
     kpis, evidence = _evidence(cell_id)
@@ -205,15 +235,16 @@ if __name__ == "__main__":
     for i, answer in enumerate(zero_shot_drift(evidence), 1):
         print(f"    run {i}: {answer[:90]}")
 
-    label = "few-shot examples REMOVED" if ablate else "with two examples"
+    label = "with two examples" if use_examples else "examples REMOVED"
     print(f"\n2. FEW-SHOT, three runs ({label})")
-    for i, answer in enumerate(few_shot_category(evidence, ablate=ablate), 1):
+    for i, answer in enumerate(
+            few_shot_category(evidence, use_examples=use_examples), 1):
         ok = "  ok" if answer in FAULT_DOMAINS else "  <- NOT IN THE TAXONOMY"
         print(f"    run {i}: {answer[:60]}{ok}")
 
     print("\n3. STRUCTURED OUTPUT, validated")
     try:
-        report = explain_anomaly(cell_id, ablate=ablate)
+        report = explain_anomaly(cell_id, use_examples=use_examples)
         print(json.dumps(report.model_dump(), indent=2))
     except ValidationError as e:
         # This is a success, not a crash: the guard caught a malformed answer
@@ -223,13 +254,18 @@ if __name__ == "__main__":
 
     print(
         "\nYour turn:\n"
-        f"  1. python {os.path.basename(__file__)} CELL-022A\n"
-        "     A healthy cell. Note that the tool already knows nothing crossed,\n"
-        "     so the interesting question is whether the MODEL agrees.\n"
-        f"  2. python {os.path.basename(__file__)} {cell_id} --ablate\n"
-        "     Drops the few-shot examples. Run it a few times and count how\n"
-        "     often the category still validates. That number is the argument\n"
-        "     for few-shot, measured on your own data instead of asserted.\n"
+        f"  1. python {os.path.basename(__file__)} {cell_id} --no-examples\n"
+        "     Drops the two worked examples and changes NOTHING else. Run it\n"
+        "     four or five times and count how often the category still\n"
+        "     validates. That number is what the examples bought you, measured\n"
+        "     on your own data instead of asserted on a slide.\n"
+        "     Note what it does not drop: the prompt still lists all four\n"
+        "     domains. So you are measuring examples against a well-written\n"
+        "     instruction, not against nothing — and 'barely any difference'\n"
+        "     is a real, reportable result.\n"
+        f"  2. python {os.path.basename(__file__)} CELL-022A\n"
+        "     A healthy cell. The answer key is empty, so the question is\n"
+        "     whether the MODEL agrees.\n"
         "  3. Add `confidence: float = Field(ge=0, le=1)` to AnomalyReport and\n"
         "     update the prompt. Watch what happens when you forget the prompt."
     )

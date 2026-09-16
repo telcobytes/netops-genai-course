@@ -488,7 +488,11 @@ def call_llm(messages, model=None, json_mode=False):
     """Plain chat completion. Returns the assistant's text content.
 
     messages: list of {"role": "system"|"user"|"assistant", "content": str}
-    json_mode: if True, enforces the response is valid JSON (Module 3's technique)
+    json_mode: if True, sets the response MIME type to application/json, so the
+        API returns something that parses. It does NOT pass a schema and does
+        NOT guarantee your keys — a model can hand you perfectly valid JSON with
+        entirely different fields in it. Pair it with a Pydantic model to get
+        correctness as well as parseability; Module 3 is where that lands.
     """
     from google.genai import types
 
