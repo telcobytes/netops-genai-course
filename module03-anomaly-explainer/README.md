@@ -66,6 +66,21 @@ useless for anything your code parses.
 `data/guardrails.py` in Module 10 is this same mechanism pointed at tool arguments.
 Learn it here, where being wrong is free.
 
+### One number, one place
+
+The prompt asks which of `PRB > 75%`, `RRC drop > 5%` and `setup success < 95%` were
+crossed — and it **interpolates those limits out of `mock_tools.THRESHOLDS`** rather than
+spelling them out.
+
+That was not always true here. The three numbers were typed out in the tool, again in
+this script's prompt, and again in the notebook's KPI table. Raise the PRB limit in
+`mock_tools.py` and the other two would have carried on asking about 75%, the model would
+have carried on answering about 75%, and nothing would have errored.
+
+Anything a prompt states about your network belongs in code first and gets interpolated
+in. A number you retype into a prompt is a number that can drift away from the system it
+describes — and the prompt is the copy nobody thinks to grep.
+
 ---
 
 ## What the model is and is not shown

@@ -33,7 +33,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm, parse_json_response  # noqa: E402
-from mock_tools import get_cell_kpis  # noqa: E402
+from mock_tools import THRESHOLDS, get_cell_kpis  # noqa: E402
 
 try:
     from pydantic import BaseModel, Field, ValidationError
@@ -136,13 +136,30 @@ def few_shot_category(evidence, runs=3, ablate=False):
 
 
 # --- 3. structured output, enforced at both levels ---------------------------
+def _threshold_text():
+    """Render mock_tools.THRESHOLDS as prompt text.
+
+    The numbers live in exactly ONE place — the tool — and the prompt asks for
+    them. They used to be typed out here as well, which is two sources of truth
+    for the same fact: raise the PRB limit in mock_tools and this prompt would
+    have gone on confidently asking about 75%, and the model would have gone on
+    confidently answering. Nothing would have errored.
+
+    Anything a prompt states about your network belongs in code first and gets
+    interpolated in. A number you retype into a prompt is a number that can
+    drift away from the system it describes.
+    """
+    return ", ".join(
+        f"{metric} {op} {limit:g}" for metric, (op, limit) in THRESHOLDS.items()
+    )
+
+
 PROMPT_TEMPLATE = """You are a RAN performance analyst. Below is a computed KPI
-summary for a single cell — rolling averages and deltas over the window.
+summary for a single cell — latest reading, rolling averages and deltas.
 
 Identify:
 1. metrics_changed - which metrics moved most
-2. thresholds_crossed - which of these were crossed: PRB utilization > 75%,
-   RRC drop rate > 5%, RRC setup success rate < 95%
+2. thresholds_crossed - which of these were crossed: {thresholds}
 3. fault_category - EXACTLY ONE of: {domains}
 4. summary - one plain-language sentence, at least 20 characters
 
@@ -159,6 +176,7 @@ def explain_anomaly(cell_id: str, ablate: bool = False) -> AnomalyReport:
     model, not a dict — so a caller cannot be handed a surprise."""
     _, evidence = _evidence(cell_id)
     prompt = PROMPT_TEMPLATE.format(
+        thresholds=_threshold_text(),
         domains=", ".join(FAULT_DOMAINS),
         examples="" if ablate else FEW_SHOT_EXAMPLES,
         evidence=evidence,
