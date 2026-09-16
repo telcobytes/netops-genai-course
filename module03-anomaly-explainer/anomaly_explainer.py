@@ -1,12 +1,28 @@
 """
 anomaly_explainer.py — Module 3 hands-on: the KPI Anomaly Explainer
 
-Reads (mocked) KPI counters for a cell and walks the module's three techniques
-in order, so the local path teaches the same thing as the Colab notebook:
+Reads (mocked) KPI counters for a cell and walks a ladder of prompts, so the
+local path teaches the same thing as the Colab notebook.
 
-    1. zero-shot      — ask loosely, three times, and watch the category drift
-    2. few-shot       — give it the taxonomy and two worked examples; drift stops
-    3. structured     — json_mode for valid JSON, Pydantic for CORRECT JSON
+Three rungs, same evidence, same model. Only the prompt changes:
+
+    RUNG 1  loose            — no taxonomy, no format constraint
+    RUNG 2  taxonomy named   — the four domains listed, no worked examples
+    RUNG 3  taxonomy + examples — rung 2 plus two symptom→category pairs
+
+Then the thing that makes any of it safe to build on:
+
+    structured output — json_mode for valid JSON, Pydantic for CORRECT JSON
+
+The ladder exists because "few-shot fixes drift" turned out to be the wrong
+attribution. Rung 1 to rung 2 and rung 2 to rung 3 are separate interventions,
+and lumping them together credits the examples with work the domain list is
+doing. The script runs all three and prints what each rung bought, so the
+student reads a number instead of taking the claim on trust.
+
+If rung 3 buys nothing over rung 2 on your data, that is a result. Report it.
+Module 10 is where this gets done properly, with a harness — this is the first
+taste of it.
 
 That last distinction is the one that matters. `json_mode=True` sets the
 response MIME type, so the API gives you something that parses. It does not
@@ -22,14 +38,17 @@ output, because the output is right. Held back, the same field becomes the
 answer key you grade against. Tools compute. Agents reason.
 
 Run:
-    python anomaly_explainer.py CELL-031A   # a real anomaly in the sample data
-    python anomaly_explainer.py CELL-022A   # healthy cell
-    python anomaly_explainer.py CELL-031A --no-examples   # drop the few-shot examples
+    python anomaly_explainer.py CELL-031A            # a real anomaly in the sample data
+    python anomaly_explainer.py CELL-022A            # healthy cell
+    python anomaly_explainer.py CELL-031A --runs=10  # ten samples per rung, not three
+    python anomaly_explainer.py CELL-031A --no-examples   # drop the examples from the
+                                                          # validated report as well
 """
 
 import json
 import os
 import sys
+from collections import Counter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm, parse_json_response  # noqa: E402
@@ -130,10 +149,15 @@ def _evidence(cell_id):
     )
 
 
-# --- 1. zero-shot: the failure, shown rather than asserted -------------------
-def zero_shot_drift(evidence, runs=3):
-    """Ask loosely, several times. The answers are all reasonable and no two
-    are the same string, which is exactly why code cannot branch on them."""
+# --- RUNG 1: loose. The failure, shown rather than asserted -------------------
+def loose_category(evidence, runs=3):
+    """Ask loosely, several times. The answers are all reasonable and no two are
+    the same string, which is exactly why code cannot branch on them.
+
+    Note what this prompt does NOT do: it never says what the categories are,
+    and it never says how to reply. Both of those are fixed at rung 2, and
+    keeping them separate from the examples is the whole point of the ladder.
+    """
     prompt = f"Categorize this cell anomaly in a few words:\n{evidence}"
     return [
         call_llm([{"role": "user", "content": prompt}]).strip()
@@ -141,18 +165,18 @@ def zero_shot_drift(evidence, runs=3):
     ]
 
 
-# --- 2. few-shot: taxonomy enforcement ---------------------------------------
-def few_shot_category(evidence, runs=3, use_examples=True):
-    """Same question, now with the buckets and two worked examples.
+# --- RUNGS 2 and 3: the taxonomy, with and without worked examples ------------
+def constrained_category(evidence, runs=3, use_examples=True):
+    """Same question, now naming the four domains and pinning the reply format.
 
-    `use_examples=False` drops the examples and keeps everything else. That is
-    the experiment: it turns "few-shot helps" from a claim into a number you
-    measured on your own data.
+    `use_examples=True` is rung 3, `False` is rung 2. That single switch is the
+    experiment, and it is deliberately the ONLY difference between them — same
+    domain list, same "reply with the domain name only", same evidence.
 
-    Be clear about what it does NOT drop. The first line still names all four
-    domains, so you are comparing examples against a well-specified instruction,
-    not against nothing. If the count barely moves, that is a real result and
-    worth saying out loud: the instruction was carrying most of the weight.
+    It is called `constrained_category` rather than `few_shot_category` because
+    at rung 2 there is no few-shot in it, and a function whose name asserts the
+    mechanism it is supposed to be testing is how you end up measuring the wrong
+    thing.
     """
     prompt = (
         f"Categorize into EXACTLY ONE of: {', '.join(FAULT_DOMAINS)}\n\n"
@@ -163,6 +187,12 @@ def few_shot_category(evidence, runs=3, use_examples=True):
         call_llm([{"role": "user", "content": prompt}]).strip()
         for _ in range(runs)
     ]
+
+
+def _tally(answers):
+    """How many of these are strings the rest of the course can branch on?"""
+    valid = sum(1 for a in answers if a in FAULT_DOMAINS)
+    return valid, len(set(answers))
 
 
 # --- 3. structured output, enforced at both levels ---------------------------
@@ -217,9 +247,18 @@ def explain_anomaly(cell_id: str, use_examples: bool = True) -> AnomalyReport:
     return AnomalyReport(**parse_json_response(raw))
 
 
+def _flat(s, width=72):
+    """One line, please. Loose answers sometimes come back with newlines and a
+    bulleted explanation, which wrecks the column alignment the ladder needs."""
+    s = " ".join(s.split())
+    return s if len(s) <= width else s[:width - 1] + "…"
+
+
 if __name__ == "__main__":
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     use_examples = "--no-examples" not in sys.argv
+    runs = next((int(a.split("=", 1)[1]) for a in sys.argv[1:]
+                 if a.startswith("--runs=")), 3)
     cell_id = args[0] if args else "CELL-031A"
 
     kpis, evidence = _evidence(cell_id)
@@ -231,18 +270,54 @@ if __name__ == "__main__":
     if not kpis["thresholds_crossed"]:
         print("    (nothing crossed — this cell is healthy)")
 
-    print("\n1. ZERO-SHOT, three runs — watch the wording move")
-    for i, answer in enumerate(zero_shot_drift(evidence), 1):
-        print(f"    run {i}: {answer[:90]}")
+    print(f"\nTHE LADDER — same evidence, same model, {runs} runs per rung.")
+    print("Only the prompt changes.")
+    if runs * 3 > 20:
+        print(f"({runs * 3} model calls. The free tier is rate-limited, so give "
+              f"it a minute.)")
 
-    label = "with two examples" if use_examples else "examples REMOVED"
-    print(f"\n2. FEW-SHOT, three runs ({label})")
-    for i, answer in enumerate(
-            few_shot_category(evidence, use_examples=use_examples), 1):
-        ok = "  ok" if answer in FAULT_DOMAINS else "  <- NOT IN THE TAXONOMY"
-        print(f"    run {i}: {answer[:60]}{ok}")
+    print(f"\n  RUNG 1  loose  ·  no taxonomy named, no format asked for")
+    rung1 = loose_category(evidence, runs=runs)
+    for i, answer in enumerate(rung1, 1):
+        print(f"      run {i:>2}: {_flat(answer)}")
+    v1, d1 = _tally(rung1)
+    print(f"      -> {v1}/{runs} usable by code, {d1} distinct strings")
 
-    print("\n3. STRUCTURED OUTPUT, validated")
+    print(f"\n  RUNG 2  taxonomy named  ·  no worked examples")
+    rung2 = constrained_category(evidence, runs=runs, use_examples=False)
+    for answer, n in Counter(rung2).most_common():
+        flag = "" if answer in FAULT_DOMAINS else "   <- NOT IN THE TAXONOMY"
+        print(f"      {_flat(answer, 46):<48} x{n}{flag}")
+    v2, _ = _tally(rung2)
+    print(f"      -> {v2}/{runs} usable by code")
+
+    print(f"\n  RUNG 3  taxonomy + two worked examples")
+    rung3 = constrained_category(evidence, runs=runs, use_examples=True)
+    for answer, n in Counter(rung3).most_common():
+        flag = "" if answer in FAULT_DOMAINS else "   <- NOT IN THE TAXONOMY"
+        print(f"      {_flat(answer, 46):<48} x{n}{flag}")
+    v3, _ = _tally(rung3)
+    print(f"      -> {v3}/{runs} usable by code")
+
+    print("\n  WHAT EACH RUNG BOUGHT")
+    print(f"      naming the taxonomy :  {v1}/{runs} -> {v2}/{runs}"
+          f"   ({v2 - v1:+d})")
+    print(f"      adding the examples : {v2:>2}/{runs} -> {v3}/{runs}"
+          f"   ({v3 - v2:+d})")
+    if v3 - v2 <= 0 < v2 - v1:
+        print("\n      Read that honestly. On this cell, with this model, today,")
+        print("      naming the four domains did the work and the worked examples")
+        print("      added nothing measurable. That is a result, not a failure —")
+        print("      and it is one you could only get by measuring. You would")
+        print("      otherwise have paid for those examples in every prompt,")
+        print("      forever, and never known.")
+        print(f"\n      Before you generalise it: {runs} runs is a small sample and")
+        print("      this is an easy case — one obvious bucket. Examples earn")
+        print("      their keep on ambiguous ones. Try --runs=10 and a healthy")
+        print("      cell before you decide what you believe.")
+
+    label = "with examples" if use_examples else "examples REMOVED"
+    print(f"\nSTRUCTURED OUTPUT, validated ({label})")
     try:
         report = explain_anomaly(cell_id, use_examples=use_examples)
         print(json.dumps(report.model_dump(), indent=2))
@@ -254,18 +329,14 @@ if __name__ == "__main__":
 
     print(
         "\nYour turn:\n"
-        f"  1. python {os.path.basename(__file__)} {cell_id} --no-examples\n"
-        "     Drops the two worked examples and changes NOTHING else. Run it\n"
-        "     four or five times and count how often the category still\n"
-        "     validates. That number is what the examples bought you, measured\n"
-        "     on your own data instead of asserted on a slide.\n"
-        "     Note what it does not drop: the prompt still lists all four\n"
-        "     domains. So you are measuring examples against a well-written\n"
-        "     instruction, not against nothing — and 'barely any difference'\n"
-        "     is a real, reportable result.\n"
-        f"  2. python {os.path.basename(__file__)} CELL-022A\n"
-        "     A healthy cell. The answer key is empty, so the question is\n"
-        "     whether the MODEL agrees.\n"
+        f"  1. python {os.path.basename(__file__)} {cell_id} --runs=10\n"
+        "     Three samples per rung is a demo. Ten is closer to evidence.\n"
+        "     Write down what each rung bought. You will want it in Module 10,\n"
+        "     where the same question gets asked with a proper harness.\n"
+        f"  2. python {os.path.basename(__file__)} CELL-022A --runs=10\n"
+        "     A healthy cell — a harder, more ambiguous case, because nothing\n"
+        "     is obviously wrong. If the examples are ever going to earn their\n"
+        "     keep, it is here rather than on the textbook congestion case.\n"
         "  3. Add `confidence: float = Field(ge=0, le=1)` to AnomalyReport and\n"
         "     update the prompt. Watch what happens when you forget the prompt."
     )

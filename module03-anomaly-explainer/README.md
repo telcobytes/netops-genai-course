@@ -16,7 +16,9 @@ cd module03-anomaly-explainer
 
 python anomaly_explainer.py CELL-031A            # a real anomaly in the sample data
 python anomaly_explainer.py CELL-022A            # a healthy cell
-python anomaly_explainer.py CELL-031A --no-examples   # the same run, few-shot examples removed
+python anomaly_explainer.py CELL-031A --runs=10  # ten samples per rung, not three
+python anomaly_explainer.py CELL-031A --no-examples   # drop the examples from the
+                                                      # validated report as well
 ```
 
 Or open [`03_anomaly_explainer.ipynb`](03_anomaly_explainer.ipynb) in Colab. The two
@@ -38,10 +40,32 @@ Every one of those is correct. None of them is something `if category == ...` ca
 branch on, and that is the whole problem. This is also the first time in the course you
 see non-determinism do real damage — Module 10 is built on it.
 
-## 2. Few-shot — taxonomy enforcement
+## 2. Taxonomy enforcement — and which intervention actually does it
 
-In telecom, few-shot is not about tone. It is **domain taxonomy enforcement**: give the
-model the buckets and two worked examples, and the drift stops.
+In telecom, few-shot is not about tone. The useful framing is **domain taxonomy
+enforcement**: get the model using your fault categories instead of inventing its own.
+
+But be careful which intervention you credit, because going from rung 1 to rung 3 changes
+**three** things at once — it names the four domains, it pins the reply format, and it adds
+two worked examples. Lump those together and you will conclude "few-shot fixed it" when the
+domain list may be doing all the work.
+
+So the script runs the rungs separately and counts:
+
+| rung | prompt | what it adds |
+|---|---|---|
+| 1 | *"Categorize this cell anomaly in a few words"* | nothing — the control |
+| 2 | names the four domains, asks for the domain name only | the taxonomy and the format |
+| 3 | rung 2 plus two worked examples | the examples, and only the examples |
+
+`WHAT EACH RUNG BOUGHT` at the bottom of the output is the measurement. If rung 3 buys
+nothing over rung 2 on your data, **that is a result — report it.** You would otherwise pay
+for those examples in every prompt, forever, and never know. This is the first time in the
+course that measuring beats asserting, and Module 10 is where it gets done properly.
+
+Two things before you generalise from it: the default three runs is a demo rather than
+evidence (`--runs=10`), and CELL-031A is an easy case with one obvious bucket. Worked
+examples earn their keep on ambiguous inputs — try the healthy cell.
 
 ```
 RADIO_ACCESS_INTERFERENCE   CAPACITY_PRB_EXHAUSTION
@@ -125,21 +149,18 @@ asks the model anything. That is what makes this an exercise rather than a demo.
 
 ## Your turn
 
-1. **`python anomaly_explainer.py CELL-031A --no-examples`** — drops the two worked
-   examples and changes nothing else. Run it four or five times and count how often the
-   category still validates. That number is what the examples bought you, measured on your
-   own data instead of asserted on a slide. Write it down; Module 10 does this properly,
-   with a harness.
+1. **`python anomaly_explainer.py CELL-031A --runs=10`** — three samples per rung is a
+   demo, ten is closer to evidence. Write down what each rung bought. You will want that
+   number in Module 10, where the same question gets asked with a real harness.
 
-   Be clear about what the flag does **not** drop: the prompt still lists all four domains.
-   So you are measuring worked examples against a well-specified instruction, not against
-   nothing. If the count barely moves, that is a real and reportable result — it means the
-   instruction was carrying most of the weight, which is worth knowing before you spend
-   context on examples in production.
-
-2. **`python anomaly_explainer.py CELL-022A`** — a healthy cell. The answer key is
-   empty; the question is whether the model agrees. A prompt that only ever says
+2. **`python anomaly_explainer.py CELL-022A --runs=10`** — a healthy cell. The answer key
+   is empty; the question is whether the model agrees. A prompt that only ever says
    "something is wrong" is not analysing anything.
+
+   It is also the harder case for the ladder, because nothing is obviously wrong. If the
+   worked examples are ever going to beat the bare domain list, it is here rather than on
+   textbook congestion — so compare the two cells before you decide what you believe about
+   few-shot.
 
 3. **Add `confidence: float = Field(ge=0, le=1)`** to `AnomalyReport` and update the
    prompt. Then try it *without* updating the prompt, and watch Pydantic catch the
