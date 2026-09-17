@@ -103,7 +103,6 @@ def main():
         sys.exit("[error] GEMINI_API_KEY is not set. Use --offline to run bag-of-words,\n"
                  "        but read the note it prints before you trust the result.")
 
-    engine = "offline bag-of-words" if args.offline else "Gemini dense embeddings"
     # Live data for the cell: KPI readings (with which thresholds were crossed) and
     # the active alarms on its site. Rungs 2 and 3 build their search text from these.
     kpis, alarms = get_cell_kpis(CELL), get_active_alarms(SITE)
@@ -112,7 +111,7 @@ def main():
     chunks = R.load_and_chunk_knowledge_base()
 
     print(f"\n{BOLD}QUERY CONSTRUCTION — three rungs, one knowledge base{OFF}")
-    print(f"{DIM}engine: {engine} · {len(chunks)} chunks · looking for {short(WANT)}{OFF}")
+    print(f"{DIM}{len(chunks)} chunks · looking for {short(WANT)}{OFF}")
     print(f"\nthe ticket, as written:\n  {DIM}{QUESTION}{OFF}\n")
     if args.offline:
         print(f"{DIM}  Offline bag-of-words matches words, not meaning, and does not reproduce\n"
@@ -143,6 +142,11 @@ def main():
             print(f"          {i}. {short(m['source'])}{flag}")
         print()
 
+    # rag_pipeline.last_engine is set by retrieve() itself, so this is the engine
+    # that ranked -- not a guess from whether a key is present. If dense embeddings
+    # failed mid-run, a warning printed above and this says word counts.
+    print(f"{DIM}engine that ranked: {R.last_engine}{OFF}")
+
     print(BOLD + "=" * 72 + OFF)
     # Three possible endings: the failure this lab is about (rung 1 wrong, rung 3
     # right), no failure because we ran offline, or no failure with Gemini today.
@@ -163,12 +167,13 @@ def main():
   are routing metadata. They belong in the ticket. They do not belong in a
   vector.
 """)
-    elif args.offline:
+    elif R.last_engine == "Offline keyword vectorizer":
         print("""
-  No failure offline, as expected: bag-of-words counts shared words, and the
-  ticket shares plenty with the congestion postmortem. The failure this lab is
-  about comes from dense embeddings matching the MEANING of the report wording.
-  Run it again with GEMINI_API_KEY set.
+  No failure, and that is expected on word counts: bag-of-words counts shared
+  words, and the ticket shares plenty with the congestion postmortem. The failure
+  this lab is about comes from dense embeddings matching the MEANING of the
+  report wording. Run it again on dense embeddings -- and if you did not pass
+  --offline, a warning above says why they were not used.
 """)
     else:
         print(f"""
