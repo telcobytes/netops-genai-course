@@ -8,11 +8,11 @@ sys.path.append(os.path.join(HERE, "..", "..", "module04-rag"))
 sys.path.append(os.path.join(HERE, "..", "..", "data"))
 
 from rag_pipeline import load_and_chunk_knowledge_base, retrieve  # noqa: E402
-from starter import QUERY  # noqa: E402
+from starter import CORPUS, LOCAL_KB, QUERY  # noqa: E402
 
 TARGET = "incident_004_backhaul_jitter.md"
 RIVAL = "incident_001_local_event_congestion.md"
-KB = os.path.join(HERE, "..", "..", "data", "knowledge_base")
+KB = LOCAL_KB          # this checkpoint's own folder, not the shared corpus
 
 
 def main() -> int:
@@ -20,7 +20,7 @@ def main() -> int:
 
     exists = os.path.exists(os.path.join(KB, TARGET))
     checks.append((f"{TARGET} exists", exists,
-                   "found" if exists else "not found — create it in data/knowledge_base/"))
+                   "found" if exists else "not found — create it in checkpoints/01_rag/kb/"))
     if not exists:
         return report(checks)
 
@@ -28,7 +28,10 @@ def main() -> int:
     substantial = len(body.split()) >= 80
     checks.append(("document has real content (>=80 words)", substantial, f"{len(body.split())} words"))
 
-    ranked = [c["source"] for c in retrieve(QUERY, load_and_chunk_knowledge_base(), k=5)]
+    # per_source (the default) ranks DOCUMENTS by their best chunk, which is what
+    # "ranks first" means here. The raw chunk ranking could put five slices of one
+    # document in the top five and never show the student's at all.
+    ranked = [c["source"] for c in retrieve(QUERY, load_and_chunk_knowledge_base(CORPUS), k=5)]
     top_is_target = bool(ranked) and ranked[0] == TARGET
     checks.append(("your document ranks first", top_is_target,
                    f"top result: {ranked[0] if ranked else 'nothing'}"))

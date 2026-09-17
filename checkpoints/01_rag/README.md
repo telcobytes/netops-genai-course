@@ -12,8 +12,13 @@ where a retriever earns its keep or quietly fails.
 
 ## Task
 
-1. Write `../../data/knowledge_base/incident_004_backhaul_jitter.md` in the same
-   shape as the existing three (Summary / Root Cause / Resolution / Prevention).
+1. Write `kb/incident_004_backhaul_jitter.md` **in this folder** — same shape as
+   the existing three (Summary / Root Cause / Resolution / Prevention).
+
+   It goes here, not in `data/knowledge_base/`, on purpose. That corpus is what
+   Module 4, all three eval cases and the capstone retrieve against, so adding a
+   document to it silently changes their results. Your runbook is still ranked
+   against all four shared documents — the checkpoint reads both folders.
 2. Re-run chunking and query with the symptom description in `starter.py`.
 3. Make the retriever rank **your new document above `incident_001`**.
 
@@ -26,6 +31,19 @@ python check.py
 Passes when the top-ranked chunk for the given query comes from
 `incident_004_backhaul_jitter.md`, and `incident_001_local_event_congestion.md`
 does not outrank it.
+
+## Why the folder matters
+
+This is the lesson underneath the exercise, and it cost this course real time.
+An evaluation corpus has to be **frozen and attributable**. The moment a lab step
+can write into the corpus a later step is graded against, a passing test can go
+red for a reason that has nothing to do with the code under test — and you will
+look for the bug in the wrong file.
+
+The same thing happened twice while this course was being built: this checkpoint
+wrote into the shared knowledge base, and Module 10's tracing demo wrote a trace
+log that the eval then graded as if it were evidence. Neither is visible reading
+any single file. Both only appear when the labs run in order.
 
 ## If it won't rank
 

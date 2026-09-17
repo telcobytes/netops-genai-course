@@ -44,7 +44,7 @@ def _document_context(text):
     return " — ".join(p for p in (title, site) if p)
 
 
-def load_and_chunk_knowledge_base():
+def load_and_chunk_knowledge_base(kb_dir=None):
     """Split each incident doc into section/paragraph-level chunks, each one
     carrying its document's title and site.
 
@@ -52,18 +52,29 @@ def load_and_chunk_knowledge_base():
     "**Site affected:** SITE-031" in one chunk and "customers reported slow data
     speeds" in another, so no chunk contains both the symptom and the site it
     happened at — and the retriever cannot match on a site ID that appears
-    nowhere near the text describing it. Module 10's EVAL-03 failed on exactly
-    this: a query about slow data speeds at SITE-031 during evening peak
-    retrieved the VoLTE incident instead, because it matched the *framing* of
-    the question ("a trouble ticket reports… no alarm cited") while the document
-    that actually described the symptoms had been cut away from its own name.
+    nowhere near the text describing it. Prepending the context is the standard
+    fix, and it is what "structure-aware" has to mean: a chunk must carry enough
+    of its document to be findable on its own.
 
-    Prepending the context is the standard fix, and it is what "structure-aware"
-    has to mean: a chunk must carry enough of its document to be findable on its
-    own.
+    CORRECTION, 16 Sep 2026. This docstring used to credit that header with
+    fixing EVAL-03 — a congestion query that retrieved the VoLTE incident. It
+    did not. The header was already being prepended on the failing runs. The
+    query was the problem: we embedded the ticket text verbatim, reporting
+    framing included, and the VoLTE postmortem IS a trouble ticket with no major
+    alarm that recurs by time of day. See build_retrieval_query. Chunking and
+    query construction are both real and they are not the same lever; this file
+    once claimed one had done the other's work.
+
+    kb_dir: a directory, or several. Defaults to the shared corpus. Checkpoint 1
+    passes [KB_DIR, its own folder] so a student's new runbook is retrievable
+    without being written into the corpus every later module is graded against.
     """
+    dirs = [KB_DIR] if kb_dir is None else (
+        [kb_dir] if isinstance(kb_dir, str) else list(kb_dir))
+    paths = sorted(q for d in dirs for q in glob.glob(os.path.join(d, "*.md")))
+
     chunks = []
-    for path in sorted(glob.glob(os.path.join(KB_DIR, "*.md"))):
+    for path in paths:
         with open(path, encoding="utf-8") as f:
             text = f.read()
         context = _document_context(text)

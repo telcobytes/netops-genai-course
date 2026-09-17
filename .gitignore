@@ -28,3 +28,8 @@ module10-eval/trace_log.jsonl
 # Maintainer notes for Claude Code. Students clone this repo (notebook cell 2 does
 # git clone + git pull), and this file catalogues defects the course has shipped.
 CLAUDE.md
+
+# Checkpoint 1 writes the student's own runbook here. It is their answer, not
+# course material, and it must never reach data/knowledge_base/ (see that
+# checkpoint's README).
+checkpoints/01_rag/kb/

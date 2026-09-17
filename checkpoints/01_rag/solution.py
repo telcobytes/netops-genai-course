@@ -42,8 +42,15 @@ experience is the signature of a transport-layer fault, not a capacity problem.
 """
 
 if __name__ == "__main__":
+    # Writes into THIS checkpoint's own kb/ folder, not the shared corpus.
+    # It used to write into data/knowledge_base/, where every later module and
+    # all three eval cases retrieve. A fifth document changes the rankings --
+    # and EVAL-03 now asserts which document ranks FIRST, so a student who ran
+    # this checkpoint and then re-ran the eval could watch a passing case go red
+    # for a reason that had nothing to do with the code they were grading.
     path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                        "..", "..", "data", "knowledge_base", "incident_004_backhaul_jitter.md")
+                        "kb", "incident_004_backhaul_jitter.md")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write(DOC)
     print(f"Wrote {os.path.basename(path)} — now run: python check.py")
