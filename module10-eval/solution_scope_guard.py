@@ -13,7 +13,19 @@ CELL-031A's congestion, and filed a CRITICAL ticket against SITE-031 — a diffe
 site than the one it was asked about — explaining it with a causal link that
 nothing in the data supports.
 
-Tier 1 caught the severity. Tier 2 scored it 2/5 and named the fabrication.
+Tier 1 caught it -- the scope rule refuses the proposal before a human ever sees
+it. Tier 2 did not. On 16 Sep 2026 the judge scored this same answer 5/5 and
+called the invented mechanism "the true driver", against a rubric whose 5 reads
+"zero hallucination".
+
+That is not a bug in the rubric. The judge is shown the scenario, the benchmark
+answer and the AGENT'S TEXT -- and the text is excellent. It is never shown the
+trace, so it cannot know the agent tried to file a CRITICAL against a site it
+was not investigating. Tier 1 grades what the agent DID; tier 2 grades what it
+SAID. A high judge score is not evidence the agent behaved, and this case is the
+cleanest proof of it in the course.
+
+Do not quote either score as fixed. Run it and read what you get.
 
 Note what did NOT happen: it did not hallucinate a KPI. Every figure it quoted was
 real. It drifted SCOPE. That is a different failure mode from Module 4's
