@@ -1,12 +1,23 @@
 """Checkpoint 2 — pass/fail. Run: python check.py"""
 
+import json
 import os
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from starter import load_alarms  # noqa: E402
+
+def load_alarms() -> list:
+    """Read the fixture directly.
+
+    The harness must not depend on a helper inside the file under test: a
+    student may rewrite starter.py freely, and copying solution.py over it
+    (solution.py defines route() and nothing else) used to break this import
+    before a single case had run. check.py tests one contract -- route().
+    """
+    with open(os.path.join(HERE, "alarms_sample.json"), encoding="utf-8") as f:
+        return json.load(f)
 
 EXPECTED = {
     "ALM-7101": "RAN",        # sustained PRB saturation over planned capacity
