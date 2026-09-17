@@ -91,6 +91,11 @@ added, moved or lost. Check whether pictures are the intended files
   misquotes the knowledge base is disproved by the first student who opens it.
 - **Numbers.** Every score or result needs a source: which script, which
   engine, which date. If you can't find one, mark it unverified.
+- **Counts and costs.** Claims like "24 chunks cost 24 calls" are usually
+  inferred, not measured. Instrument the client and count: this course's
+  embedding model refuses batches, so N texts cost N+1 calls, and two files
+  stated the wrong number. The same goes for chunk counts, token estimates and
+  timings.
 - Names, counts and structure: section headings, number of documents, chunks
   or steps, file and function names, folders that must exist.
 - Code on slides against the real code: signatures, return values, the line
@@ -105,7 +110,19 @@ added, moved or lost. Check whether pictures are the intended files
 - Prerequisites stated consistently everywhere: whether an API key is needed
   for the script, the notebook and the checkpoint, and what happens without one.
 
-**B. Exercises**
+**B. Parity across the student paths**
+A module is taught four or five times over: the script, the notebook, the lab,
+the checkpoint, the README and the slides. They drift, and the notebook drifts
+worst because it is edited least.
+- After any change to shared code or to a prompt, check what each path prints
+  now. A notebook that slices output (`print(answer[:900])`) silently hides a
+  new section added at the end — this is how an attribution block students were
+  meant to read became invisible.
+- The same example, the same numbers, the same terminology in all of them.
+- Exercises that exist in one path should exist in the others, or the paths
+  teach different labs.
+
+**C. Exercises**
 For every "your turn", checkpoint task and TODO:
 - Can a student do it with only what is written? Do they know which file and
   which line to change?
@@ -118,7 +135,7 @@ For every "your turn", checkpoint task and TODO:
 - Does the pass condition depend on something unstated, such as which engine
   is available? Can it be passed by gaming the engine (keyword stuffing)?
 
-**C. Concept delivery**
+**D. Concept delivery**
 - **One running example.** The script, notebook, exercises, slides and recap
   should follow the same scenario. A different example in each file is a
   common, silent source of confusion.
@@ -131,12 +148,22 @@ For every "your turn", checkpoint task and TODO:
   example. Don't swap in phrases until one happens to work; report what was
   measured, including the cases that didn't follow the pattern.
 - Would predict-then-reveal land harder than stating the answer first?
+- **A limitation shown without its remedies leaves students stuck.** If the
+  material demonstrates something the technique cannot do, name the standard
+  fixes, say which one the lab spends and why, and where possible add an
+  exercise that implements the cheapest one against the course's own data.
+- **Ask what triggers the run.** Labs tend to assume one input source. Check
+  whether the alternatives are acknowledged (an alarm firing, a ticket arriving,
+  a person asking) and whether the code's fallbacks correspond to them.
+- **Check the example input is what it claims.** A string presented as a ticket
+  should match the ticket in the data; here the lab embedded an eval's narration
+  *about* a ticket, which is thicker with reporter wording than the real row.
 - **Plain-language explanations in the code.** Does each step say, in words a
   NOC engineer would use, what it does and why, with a real example from the
   course data (an actual chunk, an actual query string, an actual ranking)?
   Missing explanations are a finding.
 
-**D. Text to cut**
+**E. Text to cut**
 - Changelog narration: "used to", "CORRECTION", dated stories about how the
   course was built or which bug was found. Keep the reasoning, in the present
   tense; the history belongs in git.
@@ -149,7 +176,7 @@ For every "your turn", checkpoint task and TODO:
 Don't confuse the two kinds of comment: history gets cut, explanation stays.
 A long comment that teaches the concept with an example is not clutter.
 
-**E. Tone**
+**F. Tone**
 Written from the student's side, present tense, specific. Confident is good;
 defensive, self-referential or jokey at the student's expense ("instead of a
 refund") is not. Check punchline density.
@@ -168,11 +195,13 @@ Report in the conversation, most severe first. Don't edit files.
    main problems?
 2. **Wrong or broken (fix first):** a table with `#`, where (`file:line`,
    notebook cell, or slide title), and the problem stated plainly with evidence.
-3. **Slides vs lab** (when a deck was given): mismatches, grouped by slide title.
-4. **Concept delivery:** bullets, each with a concrete suggested change.
-5. **Text to cut or move to instructor notes:** bullets with locations.
-6. **Tone:** what works, and the patterns that get in the way.
-7. **Suggested order:** the sequence you'd fix things in, main student path first.
+3. **Drift between the paths:** what the script, notebook, lab, checkpoint and
+   README now disagree about.
+4. **Slides vs lab** (when a deck was given): mismatches, grouped by slide title.
+5. **Concept delivery:** bullets, each with a concrete suggested change.
+6. **Text to cut or move to instructor notes:** bullets with locations.
+7. **Tone:** what works, and the patterns that get in the way.
+8. **Suggested order:** the sequence you'd fix things in, main student path first.
 
 End by offering to make the changes.
 
@@ -190,6 +219,13 @@ End by offering to make the changes.
   user-facing string changed too, confirm that's the only other difference.
 - Re-run every changed script offline. Re-run anything that needs the API only
   with the user's go-ahead, and update any text the real output contradicts.
+- After changing shared code or a prompt, walk the other student paths and fix
+  what now disagrees — especially truncated prints and stated counts.
+- **A rule in a prompt is a probability, not a guarantee.** Before writing that
+  a model "will" do something, run it more than once; today the same prompt
+  cited its source on one run and labelled everything generic on the next. If
+  the behaviour matters, record it in the trace so the eval can assert it
+  instead of hoping.
 - Keep notebook JSON formatting as it was (`indent=1`, trailing newline) so
   the diff stays readable.
 
@@ -199,6 +235,14 @@ The deck is edited outside this repo. Produce two things:
   palette and fonts (read them from `ppt/slides/slideN.xml` and
   `ppt/theme/theme1.xml`). Every fact in a diagram is checked against the data
   or a real run before it's drawn.
+- **Charts that conclude something.** One chart per claim, one axis, real
+  labelled examples rather than an abstract grid, and a reference point so a
+  number means something (include the unrelated case, so "close" has a floor).
+  Two charts of the same claim side by side read as two unfinished ones. End on
+  what the reader should do differently.
+- **Insertion points.** Adding a slide shifts every later number and can break
+  "three slides from now" in the notes. Insert inside the span those references
+  already cross, so the distances stay true, or fix each one.
 - **A prompt for Cowork** (or whoever edits the deck), written for a reader with
   no context:
   - never overwrite the deck; save a new timestamped file
