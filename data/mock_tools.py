@@ -78,9 +78,16 @@ def get_cell_kpis(cell_id: str, window_minutes: int = 60) -> dict:
         thresholds_crossed -- list of {metric, value, threshold, comparison}
         readings      -- the underlying rows, so students can still see raw data
     """
-    rows = [r for r in _load_csv("kpis.csv") if r["cell_id"] == cell_id]
+    all_rows = _load_csv("kpis.csv")
+    rows = [r for r in all_rows if r["cell_id"] == cell_id]
     if not rows:
-        return {}
+        # An empty dict used to come back here, and an agent reads {} as "this
+        # cell has no interesting counters" rather than "you asked for a cell
+        # that does not exist". Same defect as the alarm feed's old empty list:
+        # a typo in an identifier became a clean bill of health.
+        raise ValueError(
+            f"unknown cell_id {cell_id!r} — known cells: "
+            f"{', '.join(sorted({r['cell_id'] for r in all_rows}))}")
 
     rows.sort(key=lambda r: r["timestamp"])
     window_end = _parse_ts(rows[-1]["timestamp"])
@@ -158,13 +165,22 @@ def lookup_topology(node_id: str) -> Optional[dict]:
     capacity, etc. Mirrors an inventory/topology API.
     """
     topo = _load_json("topology.json")
+    known = []
     for site in topo["sites"]:
+        known.append(site["site_id"])
         if site["site_id"] == node_id:
             return site
         for cell in site["cells"]:
+            known.append(cell["cell_id"])
             if cell["cell_id"] == node_id:
                 return {**cell, "site_id": site["site_id"], "vendor": site["vendor"], "region": site["region"]}
-    return None
+
+    # An unknown node used to return None, which a caller reads as "this node has
+    # no neighbours" -- indistinguishable from a cell that genuinely sits alone.
+    # That is the failure this course spends Module 10 guarding against: an agent
+    # that "checked the neighbours", found none, and blamed the cell. Say so.
+    raise ValueError(
+        f"unknown node_id {node_id!r} — known nodes: {', '.join(sorted(known))}")
 
 
 VALID_SEVERITIES = ("MINOR", "MAJOR", "CRITICAL")

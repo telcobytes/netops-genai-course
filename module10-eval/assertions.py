@@ -140,6 +140,27 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
     return results
 
 
+def _topo(node):
+    """Topology lookup for the GRADER, not for the agent.
+
+    mock_tools.lookup_topology now raises on an unknown node -- deliberately, so
+    an agent that fat-fingers an id gets told rather than being handed a silent
+    None it reads as "no neighbours". But grading walks whatever the agent
+    actually passed, and a bad agent call must produce a FAILED ASSERTION, never
+    a crashed harness. Strict tool, defensive grader.
+    """
+    if not node:
+        return {}
+    # imported here, like the other two call sites in this file: assertions.py
+    # is importable without data/ on sys.path so the tier-1 lesson can be read
+    # on its own.
+    from mock_tools import lookup_topology  # noqa: E402
+    try:
+        return lookup_topology(node) or {}
+    except ValueError:
+        return {}
+
+
 def _neighbour_ids(case: dict) -> set:
     """The cells this case's cell hands traffic to, plus their sites.
 
@@ -154,11 +175,11 @@ def _neighbour_ids(case: dict) -> set:
     sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
     from mock_tools import lookup_topology  # noqa: E402
 
-    topo = lookup_topology(case.get("cell_id") or "") or {}
+    topo = _topo(case.get("cell_id"))
     ids = set()
     for cell in topo.get("neighbors", []):
         ids.add(cell)
-        nb = lookup_topology(cell) or {}
+        nb = _topo(cell)
         if nb.get("site_id"):
             ids.add(nb["site_id"])
     return ids
@@ -176,7 +197,7 @@ def _derived_ceiling(case: dict) -> str:
     from mock_tools import lookup_topology  # noqa: E402
 
     node = case.get("cell_id") or ""
-    site = node if node.startswith("SITE-") else (lookup_topology(node) or {}).get("site_id", "")
+    site = node if node.startswith("SITE-") else _topo(node).get("site_id", "")
     return highest_active_alarm_severity(site) if site else "CRITICAL"
 
 
