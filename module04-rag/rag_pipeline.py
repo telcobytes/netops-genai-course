@@ -337,8 +337,11 @@ explicitly if this matches a known prior pattern.
 
 
 if __name__ == "__main__":
+    # The ticket the whole module follows (EVAL-03). Change both lines to try your
+    # own, e.g. cell_id = "CELL-022A" and a question about VoLTE call drops.
     cell_id = "CELL-031A"
-    question = "Why does CELL-031A keep having congestion problems?"
+    question = ("A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 during "
+                "evening peak hours for the past three days, with no specific alarm cited yet.")
     print(f"Question: {question}\n")
 
     chunks = load_and_chunk_knowledge_base()
