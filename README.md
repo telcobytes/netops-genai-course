@@ -84,7 +84,7 @@ Every script can be run directly from the **repository root** without changing d
 |---|---|---|
 | **01** | *First API call — the 3-line pattern* | `python module01-summarizer/gemini_quickstart.py` |
 | **01** | Incident Summarizer | `python module01-summarizer/summarizer.py` |
-| **02** | Deep Research (No-Code) | *(no code by design — see [`module02-nocode/`](module02-nocode/))* |
+| **02** | The No-Code Ceiling | *(no code by design — see [`module02-nocode/`](module02-nocode/))* |
 | **03** | Structured Anomaly Explainer | `python module03-anomaly-explainer/anomaly_explainer.py CELL-031A` |
 | **04** | Semantic RAG Grounding | `python module04-rag/rag_pipeline.py` |
 | **05** | Hand-Rolled ReAct Agent | `python module05-react-loop/react_agent.py` |
