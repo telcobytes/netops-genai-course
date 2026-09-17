@@ -171,9 +171,23 @@ def run_react_agent(question: str, max_steps: int = 6, history: list | None = No
         else:
             try:
                 observation = _trim(tool_name, TOOLS[tool_name](arg))
-            except Exception as e:  # keep the loop alive even on a bad argument
+            except Exception as e:
+                # Agents pass the wrong argument -- a cell id where a site id
+                # belongs is the classic one. The loop stays alive and hands the
+                # error back, which is why mock_tools raises with the valid
+                # options instead of returning {}:
+                #
+                #   Error calling get_active_alarms: unknown site_id 'CELL-031A'
+                #   — known sites: SITE-014, SITE-022, SITE-031
+                #
+                # A tool that returns nothing teaches the agent nothing. A tool
+                # that names what it accepts gets a corrected call on the next step.
                 observation = f"Error calling {tool_name}: {e}"
 
+        # Everything an observation contains was written by something upstream --
+        # an alarm description is free text from whoever raised it -- and it goes
+        # straight into the model's context. Treat tool output as untrusted input;
+        # Module 10's failure lab is built on exactly this.
         print(f"Observation: {observation}")
         messages.append({"role": "user", "content": f"Observation: {observation}"})
 

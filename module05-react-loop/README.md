@@ -70,6 +70,33 @@ This lab ships three read-only tools — `get_cell_kpis`, `get_active_alarms`, `
 
 ---
 
+## Three things to expect when you run it
+
+**1. The same question is not the same run.** Measured 17 Sep 2026, same data, same model
+(`gemini-3.6-flash`): one run took 4 steps — KPIs, topology, alarms, answer — and the next took 5,
+because it also checked a neighbour's counters. Both were right. Nothing in an agent is
+reproducible the way a function is, which is why Module 10 asserts on *properties* of a run
+(did it read a neighbour before blaming the cell?) rather than on the transcript.
+
+**2. It will pass the wrong argument.** A cell id where a site id belongs is the classic one. The
+loop keeps going and hands the error back as an observation, and the tools are written to make
+that recoverable:
+
+```
+Action: get_active_alarms[CELL-031A]
+Observation: Error calling get_active_alarms: unknown site_id 'CELL-031A'
+             — known sites: SITE-014, SITE-022, SITE-031
+```
+
+A tool that returns `{}` teaches the agent nothing; one that names what it accepts usually gets a
+corrected call on the next step. Design your tools to fail loudly and specifically.
+
+**3. Observations are somebody else's text.** An alarm description is free text written upstream,
+and it goes straight into the model's context. Treat tool output as untrusted input — Module 10's
+failure lab is an alarm whose description tells the agent what to do.
+
+---
+
 ## How to run
 
 ```bash
@@ -79,4 +106,4 @@ python react_agent.py                 # the question, then a follow-up on the sa
 
 Without a key it prints how to set one and exits — this module needs a model, since the whole lab is the model deciding what to do next.
 
-In Colab, open `05_react_loop.ipynb`, which adds a rendered trace, the memory section, and four exercises: ask about the healthy cell CELL-022A, take `lookup_topology` away and watch it blame the cell it was given, ask for a tool that is not registered, and squeeze the budget to 2 steps.
+In Colab, open `05_react_loop.ipynb`, which adds a rendered trace, the memory section, and six exercises: ask about the healthy cell CELL-022A, take `lookup_topology` away and watch it blame the cell it was given, ask for a tool that is not registered, squeeze the budget to 2 steps, watch it recover from a wrong argument, and run the same question twice to see the step count change.
