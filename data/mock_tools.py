@@ -170,6 +170,12 @@ def lookup_topology(node_id: str) -> Optional[dict]:
 VALID_SEVERITIES = ("MINOR", "MAJOR", "CRITICAL")
 
 
+# Every ticket used to come back as TCK-MOCK-0001. The capstone opened three in a
+# row and printed the same id three times, which made three tickets look like one
+# -- the opposite of the mistake it was actually making.
+_ticket_counter = 0
+
+
 def create_ticket(
     summary: str,
     site_id: str = "",
@@ -196,8 +202,11 @@ def create_ticket(
             f"severity must be one of {', '.join(VALID_SEVERITIES)} -- got {severity!r}"
         )
 
+    global _ticket_counter
+    _ticket_counter += 1
+
     return {
-        "ticket_id": "TCK-MOCK-0001",
+        "ticket_id": f"TCK-MOCK-{_ticket_counter:04d}",
         "status": "Open",
         "summary": summary,
         "site_id": site_id,
