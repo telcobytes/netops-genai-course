@@ -242,6 +242,13 @@ def main():
          chunks = R.load_and_chunk_knowledge_base([R.KB_DIR, os.path.join(HERE, "scratch_kb")])
      Which rung breaks first? Do not add it to data/knowledge_base/: later
      modules and the eval are graded against that folder.
+  4. A fix this lab does NOT use: filter before you rank. Every chunk carries its
+     document's site in c["context"], so one line keeps only this site's chunks:
+         chunks = [c for c in chunks if "SITE-031" in c["context"]]
+     Add it after the chunks line and re-run. The VoLTE incident cannot win any
+     rung now -- it is not in the pool. What else did that line drop, and when
+     would losing it hurt? (Production systems do this with metadata filters, a
+     score floor, or a reranker. We spend the free one: query construction.)
 """)
     print(BOLD + "=" * 72 + OFF)
 
