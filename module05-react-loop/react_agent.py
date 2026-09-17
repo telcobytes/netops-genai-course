@@ -91,13 +91,28 @@ def _context_size(messages):
     return sum(len(m["content"]) for m in messages)
 
 
-def run_react_agent(question: str, max_steps: int = 6) -> str:
-    messages = [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": question},
-    ]
+def run_react_agent(question: str, max_steps: int = 6, history: list | None = None) -> str:
+    """Answer one question, calling tools until the model concludes.
 
-    call_history = []  # Tracks (tool_name, argument) to detect cognitive cycles
+    history: a list you own, and the agent's only memory. Pass one in and the
+    whole transcript is written back into it; pass the SAME list to a later
+    question and the agent continues where it left off, so it can answer a
+    follow-up from what it already read instead of calling the tools again.
+
+        session = []
+        run_react_agent("Why is CELL-031A underperforming right now?", history=session)
+        run_react_agent("What about its neighbours?", history=session)
+
+    Nothing about that memory lives in the model. It lives in your list, which is
+    what "the agent has state" actually means -- and why it is your job to decide
+    what stays in it.
+    """
+    messages = list(history) if history else [{"role": "system", "content": SYSTEM_PROMPT}]
+    messages.append({"role": "user", "content": question})
+
+    # Repeats are counted per question, not per session: asking again in a NEW turn
+    # is a fair thing to do.
+    call_history = []
 
     start_size = _context_size(messages)
     for step in range(1, max_steps + 1):
@@ -110,9 +125,13 @@ def run_react_agent(question: str, max_steps: int = 6) -> str:
 
         if "Final Answer:" in response_text:
             messages.append({"role": "assistant", "content": response_text})
+            if history is not None:
+                history[:] = messages
             print(f"\nDone in {step} step(s). Context grew {start_size:,} -> "
                   f"{_context_size(messages):,} chars.")
-            return response_text
+            # Return the answer, not the reasoning that produced it. The model's
+            # Thought lines are on screen already; a caller wants the conclusion.
+            return response_text.split("Final Answer:", 1)[1].strip()
 
         match = ACTION_PATTERN.search(response_text)
         messages.append({"role": "assistant", "content": response_text})
@@ -158,14 +177,23 @@ def run_react_agent(question: str, max_steps: int = 6) -> str:
         print(f"Observation: {observation}")
         messages.append({"role": "user", "content": f"Observation: {observation}"})
 
+    if history is not None:
+        history[:] = messages
     return (
-        "Max steps reached without a Final Answer — cognitive step budget exhausted. "
-        "Escalating incident to Human L3 NOC Queue with recorded diagnostic trace."
+        f"No conclusion within {max_steps} steps — the step budget stopped it. "
+        "Hand the trace above to an L3 engineer; nothing was escalated automatically."
     )
 
 
 if __name__ == "__main__":
     question = "Why is CELL-031A underperforming right now?"
     print(f"Question: {question}")
-    result = run_react_agent(question)
+
+    # `session` is the agent's memory. Keep it and the follow-up costs no tool calls.
+    session = []
+    result = run_react_agent(question, history=session)
     print(f"\n=== RESULT ===\n{result}")
+
+    follow_up = "What should the NOC do about it first?"
+    print(f"\n\nFollow-up: {follow_up}")
+    print(f"\n=== RESULT ===\n{run_react_agent(follow_up, history=session)}")
