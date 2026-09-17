@@ -1,9 +1,10 @@
 """
 rag_pipeline.py — Module 4 hands-on: grounding the RCA drafter in real incidents
 
-Implements the four RAG steps from the lecture — chunk, embed, retrieve, augment —
-against the knowledge_base/ incident write-ups, then uses the retrieved context to
-draft a grounded RCA instead of letting the model guess.
+Implements the five RAG steps from the lecture — chunk, embed, construct the
+query, retrieve, augment — against the knowledge_base/ incident write-ups, then
+uses the retrieved context to draft a grounded RCA instead of letting the model
+guess.
 
 Retrieval uses real semantic dense embeddings via Gemini
 by default if GEMINI_API_KEY is present, with an automatic graceful fallback to an
@@ -56,14 +57,8 @@ def load_and_chunk_knowledge_base(kb_dir=None):
     fix, and it is what "structure-aware" has to mean: a chunk must carry enough
     of its document to be findable on its own.
 
-    CORRECTION, 16 Sep 2026. This docstring used to credit that header with
-    fixing EVAL-03 — a congestion query that retrieved the VoLTE incident. It
-    did not. The header was already being prepended on the failing runs. The
-    query was the problem: we embedded the ticket text verbatim, reporting
-    framing included, and the VoLTE postmortem IS a trouble ticket with no major
-    alarm that recurs by time of day. See build_retrieval_query. Chunking and
-    query construction are both real and they are not the same lever; this file
-    once claimed one had done the other's work.
+    Chunking decides what CAN be found. It does not decide what the retriever is
+    asked to find -- that is step 3, build_retrieval_query.
 
     kb_dir: a directory, or several. Defaults to the shared corpus. Checkpoint 1
     passes [KB_DIR, its own folder] so a student's new runbook is retrievable
@@ -112,11 +107,8 @@ def _cosine_similarity(a, b):
 def embed_with_gemini_api(texts, task_type="RETRIEVAL_DOCUMENT"):
     """Production dense embeddings, via llm_client like everything else.
 
-    This used to reach for the SDK directly and pin `text-embedding-004`, which
-    Google retired — and because the caller below swallows embedding errors, the
-    lab kept "working" on keyword vectors while claiming semantic retrieval.
-    Embeddings now go through llm_client.embed_texts(), which walks a candidate
-    list the same way chat models do.
+    llm_client.embed_texts() picks the embedding model from a candidate list, the
+    same way chat models are picked, so a retired model does not break the lab.
 
     task_type: retrieval is asymmetric. The knowledge base is embedded as
     RETRIEVAL_DOCUMENT and the question as RETRIEVAL_QUERY, because a short
@@ -129,24 +121,79 @@ def embed_with_gemini_api(texts, task_type="RETRIEVAL_DOCUMENT"):
 
 # The knowledge base does not change between queries, and gemini-embedding-*
 # will not embed a batch — so embedding 24 chunks costs 24 calls. Do it once per
-# process and reuse. Without this, every retrieve() re-embeds the whole corpus,
-# which is the same shape of bug that made notebook 04 spend 29 calls on one query.
+# process and reuse, rather than re-embedding the whole corpus on every retrieve().
 _chunk_vector_cache = {}
 
 
-# ---------- Step 3: Retrieve ----------
+# ---------- Step 3: Construct the Query ----------
+def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id="",
+                          style="measured+question"):
+    """Decide WHAT YOU EMBED. The question is what the customer wrote; the query
+    is what the retriever searches with. They are not the same thing, and the
+    question still goes into the prompt unchanged -- this only changes the search.
+
+    Measured 16 Sep 2026 against the shipped knowledge base, EVAL-03, dense
+    embeddings. The scenario reads:
+
+        "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031
+         during evening peak hours for the past three days, with no specific
+         alarm cited yet."
+
+    Embed that whole string and the top hit is incident_003 -- a VoLTE
+    postmortem, for a congestion question. Not a bug: three of its four phrases
+    describe the SHAPE OF THE REPORT (a trouble ticket, reported by field, no
+    alarm cited, recurring by time of day) and incident_003 IS a trouble ticket
+    with no major alarm that recurs by time of day. Delete those eleven words
+    and incident_001 takes the top three slots. Same model, same chunks, same
+    code.
+
+    The rule this file follows, and the one worth carrying to your own systems:
+
+        RETRIEVE ON WHAT YOU MEASURED AND HOW IT BEHAVES,
+        NOT ON HOW IT WAS REPORTED.
+
+    Ticket numbers, who raised it, and whether an alarm was cited are routing
+    metadata. They belong in the ticket. They do not belong in a vector.
+
+    style is here so the lab can run all three and compare:
+      "question"           the raw question, embedded as-is
+      "measured"           alarm types + crossed KPI thresholds + identifiers
+      "measured+question"  measured facts first, the question after as context
+    """
+    if style == "question":
+        return question
+
+    parts = []
+    for a in (alarms or []):
+        if a.get("alarm_type"):
+            parts.append(a["alarm_type"].replace("_", " ").lower())
+    for t in ((kpis or {}).get("thresholds_crossed") or []):
+        if t.get("metric"):
+            parts.append(t["metric"].replace("_pct", "").replace("_", " "))
+    for ident in (cell_id, site_id):
+        if ident:
+            parts.append(str(ident))
+
+    # No live telemetry to speak of -- an alarm-less, KPI-less call. Embedding an
+    # empty string finds nothing, so fall back rather than silently retrieve junk.
+    if not parts:
+        return question
+
+    measured = " ".join(dict.fromkeys(parts))       # de-duplicated, order kept
+    return measured if style == "measured" else f"{measured}. {question}"
+
+
+# ---------- Step 4: Retrieve ----------
 def _top_k(scored, k, per_source):
     """Turn a full ranking into the k results to return.
 
-    per_source=True gives k DOCUMENTS, represented by their best-scoring chunk.
-    That is what the lecture claims -- slide 35 says "the 2 most relevant past
-    incidents", and slides 39 and 40 both say the failure mode to watch is "the
-    wrong DOCUMENT won". Ranking stays chunk-level, which is slide 37's mechanic
-    and is correct; only the selection changes.
+    per_source=True gives k DOCUMENTS, represented by their best-scoring chunk --
+    "the 2 most relevant past incidents", not two slices of one. Ranking stays
+    chunk-level; only the selection changes.
 
     It matters more than it looks. Each incident is six chunks, so the two best
-    chunks are frequently two sections of the same incident: the student sees
-    the same postmortem printed twice under "top two", and the eval's
+    chunks are frequently two sections of the same incident: the same postmortem
+    printed twice under "top two", and an eval check like
     `must_not_retrieve: incident_002` passes without incident_002 ever having
     been in contention -- an assertion that cannot fail is not an assertion.
 
@@ -227,88 +274,28 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
     return _top_k(scored, k, per_source)
 
 
-# ---------- Step 4: Augment ----------
-def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id="",
-                          style="measured+question"):
-    """Step 3 of five: decide WHAT YOU EMBED. This is the step the lecture used
-    to skip, and it decided the outcome.
-
-    Measured 16 Sep 2026 against the shipped knowledge base, EVAL-03, dense
-    embeddings. The scenario reads:
-
-        "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031
-         during evening peak hours for the past three days, with no specific
-         alarm cited yet."
-
-    Embed that whole string and the top hit is incident_003 -- a VoLTE
-    postmortem, for a congestion question. Not a bug: three of its four phrases
-    describe the SHAPE OF THE REPORT (a trouble ticket, reported by field, no
-    alarm cited, recurring by time of day) and incident_003 IS a trouble ticket
-    with no major alarm that recurs by time of day. Delete those eleven words
-    and incident_001 takes the top three slots. Same model, same chunks, same
-    code.
-
-    The rule this file follows, and the one worth carrying to your own systems:
-
-        RETRIEVE ON WHAT YOU MEASURED AND HOW IT BEHAVES,
-        NOT ON HOW IT WAS REPORTED.
-
-    Ticket numbers, who raised it, and whether an alarm was cited are routing
-    metadata. They belong in the ticket. They do not belong in a vector.
-
-    style is here so the lab can run all three rungs and compare:
-      "question"           the raw question -- what this pipeline used to embed
-      "measured"           alarm types + crossed KPI thresholds + identifiers
-      "measured+question"  measured facts first, the question after as context
-    """
-    if style == "question":
-        return question
-
-    parts = []
-    for a in (alarms or []):
-        if a.get("alarm_type"):
-            parts.append(a["alarm_type"].replace("_", " ").lower())
-    for t in ((kpis or {}).get("thresholds_crossed") or []):
-        if t.get("metric"):
-            parts.append(t["metric"].replace("_pct", "").replace("_", " "))
-    for ident in (cell_id, site_id):
-        if ident:
-            parts.append(str(ident))
-
-    # No live telemetry to speak of -- an alarm-less, KPI-less call. Embedding an
-    # empty string finds nothing, so fall back rather than silently retrieve junk.
-    if not parts:
-        return question
-
-    measured = " ".join(dict.fromkeys(parts))       # de-duplicated, order kept
-    return measured if style == "measured" else f"{measured}. {question}"
-
-
+# ---------- Step 5: Augment ----------
 def draft_grounded_rca(cell_id: str, question: str, trace: list | None = None,
                        query_style: str = "measured+question") -> str:
     """Draft an RCA grounded in retrieved prior incidents.
 
     `trace`, when given, is appended to with a record of what this function did.
     A property you want to assert on has to be recorded by the code that does it:
-    run_eval's `must_retrieve` check reads this, and before it existed the check
-    could only ever fail, because nothing told it which documents had been used.
+    run_eval's `must_retrieve` check reads this to learn which documents were used.
     """
     kpis = get_cell_kpis(cell_id)
 
-    # Resolve the SITE from topology rather than splitting the cell ID. The old
-    # `cell_id.split("-")[0]` produced the literal string "CELL" for CELL-031A —
-    # an unknown site, which returned [] — so this drafter had never once been
-    # shown an alarm, and said so in its RCAs while three alarms were active.
+    # Resolve the SITE from topology rather than parsing the cell ID -- alarms are
+    # raised per site, and "CELL-031A" does not contain its site's ID.
     topology = lookup_topology(cell_id) or {}
     site_id = topology.get("site_id") or (cell_id if str(cell_id).startswith("SITE-") else None)
     alarms = get_active_alarms(site_id)
 
     chunks = load_and_chunk_knowledge_base()
 
-    # The question is what the customer wrote. The query is what we embed, and
-    # they are not the same thing -- see build_retrieval_query for the measurement
-    # that made this a separate step. Pass query_style="question" to get the old
-    # behaviour back; the lab does exactly that, to show the difference.
+    # The question is what the customer wrote. The query is what we search with.
+    # Pass query_style="question" to embed the question as-is; the lab does
+    # exactly that, to show the difference.
     query = build_retrieval_query(question, kpis, alarms, cell_id, site_id,
                                   style=query_style)
     retrieved = retrieve(query, chunks, k=2)
@@ -319,7 +306,7 @@ def draft_grounded_rca(cell_id: str, question: str, trace: list | None = None,
                      "style": query_style, "k": 2},
             # ORDER MATTERS and is asserted on: retrieved[0] is the document the
             # retriever ranked first. "Appears in the top two" is a weaker claim
-            # than it looks -- it passed for months while the top hit was wrong.
+            # than it looks.
             "retrieved": [c["source"] for c in retrieved],
         })
     retrieved_text = "\n\n".join(
@@ -369,26 +356,32 @@ if __name__ == "__main__":
     print("\n--- Constructed query (what actually gets embedded) ---")
     print(f"  {query}")
     print("  Built from active alarm types, crossed KPI thresholds and IDs, then the\n"
-          "  question. Pass style=\"question\" to build_retrieval_query to embed the\n"
-          "  question alone, or run lab_query_construction.py to compare all three.")
+          "  question. The question itself still goes into the prompt unchanged.\n"
+          "  Run lab_query_construction.py to compare the three query styles.")
 
     top_matches = retrieve(query, chunks, k=2)
-    print("\n--- Top 2 retrieved incidents (best chunk of each) ---")
+    print("\n--- Top 2 retrieved documents (best chunk of each) ---")
     for m in top_matches:
         print(f"\n[{m['source']}]\n{m.get('excerpt', m['text'])[:200]}...")
 
-    # "Retrieval is ranking, not lookup" is the line on slide 40, and it is worth
-    # more when you can see the ranking. These are the chunks that LOST: same
-    # question, same knowledge base, just below the cut.
+    # Retrieval is ranking, not lookup, and that is easier to believe when you can
+    # see the ranking. These are the chunks just below the cut.
     raw = retrieve(query, chunks, k=4, per_source=False)
     print("\n--- The ranking underneath (raw chunks, no per-source limit) ---")
     for i, m in enumerate(raw, 1):
         marker = "  <- returned" if m in top_matches else ""
         print(f"  {i}. {m['source']:<44}{marker}")
-    print("\n  Note how often one incident takes several of the top slots. Ranking is\n"
-          "  chunk-level; the answer you want is document-level. That gap is why\n"
-          "  retrieve() returns one chunk per source -- pass per_source=False to see\n"
-          "  the raw ranking, and ask yourself which document never got considered.")
+
+    sources = [m["source"] for m in raw]
+    repeated = sorted({s for s in sources if sources.count(s) > 1})
+    if repeated:
+        print(f"\n  {', '.join(repeated)} took more than one of the top {len(raw)} slots.\n"
+              "  Ranking is chunk-level; the answer you want is document-level. That\n"
+              "  gap is why retrieve() returns one chunk per document by default.")
+    else:
+        print(f"\n  No document took more than one of the top {len(raw)} slots this time.\n"
+              "  It often does: each document is several chunks. That is why retrieve()\n"
+              "  returns one chunk per document by default.")
 
     if os.environ.get("GEMINI_API_KEY"):
         print("\n--- Grounded RCA (calls the LLM) ---\n")
