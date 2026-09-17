@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-lab_query_construction.py — Module 4 hands-on: the step that is not on the slide.
+lab_query_construction.py — Module 4 hands-on: step 3, constructing the query.
 
     python module04-rag/lab_query_construction.py            # needs GEMINI_API_KEY
     python module04-rag/lab_query_construction.py --offline  # bag-of-words, no key
 
 THE SETUP
 ---------
-Module 4 teaches RAG as four steps: chunk, embed, retrieve, augment. Every one of
-them is correct. Together they are not sufficient, and this lab is where you find
-that out for yourself.
+Module 4 teaches RAG as five steps: chunk, embed, construct the query, retrieve,
+augment. Step 3 is the one most RAG code skips: it embeds the user's text as-is.
+This lab shows what that costs.
 
 Here is EVAL-03's ticket, which the drafter used to embed whole:
 

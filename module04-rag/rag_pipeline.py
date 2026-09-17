@@ -350,6 +350,7 @@ explicitly if this matches a known prior pattern.
 
 
 if __name__ == "__main__":
+    cell_id = "CELL-031A"
     question = "Why does CELL-031A keep having congestion problems?"
     print(f"Question: {question}\n")
 
@@ -359,7 +360,19 @@ if __name__ == "__main__":
     mode = "Gemini dense embeddings" if os.environ.get("GEMINI_API_KEY") else "Offline keyword vectorizer"
     print(f"Retrieval Engine: {mode}")
 
-    top_matches = retrieve(question, chunks, k=2)
+    # Build the query the same way draft_grounded_rca does, so the ranking printed
+    # here is the ranking the RCA below is grounded in -- not the raw question's.
+    kpis = get_cell_kpis(cell_id)
+    site_id = (lookup_topology(cell_id) or {}).get("site_id")
+    alarms = get_active_alarms(site_id)
+    query = build_retrieval_query(question, kpis, alarms, cell_id, site_id)
+    print("\n--- Constructed query (what actually gets embedded) ---")
+    print(f"  {query}")
+    print("  Built from active alarm types, crossed KPI thresholds and IDs, then the\n"
+          "  question. Pass style=\"question\" to build_retrieval_query to embed the\n"
+          "  question alone, or run lab_query_construction.py to compare all three.")
+
+    top_matches = retrieve(query, chunks, k=2)
     print("\n--- Top 2 retrieved incidents (best chunk of each) ---")
     for m in top_matches:
         print(f"\n[{m['source']}]\n{m.get('excerpt', m['text'])[:200]}...")
@@ -367,7 +380,7 @@ if __name__ == "__main__":
     # "Retrieval is ranking, not lookup" is the line on slide 40, and it is worth
     # more when you can see the ranking. These are the chunks that LOST: same
     # question, same knowledge base, just below the cut.
-    raw = retrieve(question, chunks, k=4, per_source=False)
+    raw = retrieve(query, chunks, k=4, per_source=False)
     print("\n--- The ranking underneath (raw chunks, no per-source limit) ---")
     for i, m in enumerate(raw, 1):
         marker = "  <- returned" if m in top_matches else ""
@@ -379,6 +392,6 @@ if __name__ == "__main__":
 
     if os.environ.get("GEMINI_API_KEY"):
         print("\n--- Grounded RCA (calls the LLM) ---\n")
-        print(draft_grounded_rca("CELL-031A", question))
+        print(draft_grounded_rca(cell_id, question))
     else:
         print("\n[Set GEMINI_API_KEY to run the final augmented generation step]")
