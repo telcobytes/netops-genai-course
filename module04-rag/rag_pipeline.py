@@ -448,6 +448,13 @@ def draft_grounded_rca(cell_id: str, question: str, trace: list | None = None,
         for c in retrieved
     )
 
+    # Retrieval returns k documents whether or not they are relevant -- for this
+    # ticket the second one is a VoLTE postmortem from another site. So the prompt
+    # asks the model to attribute what it uses and to name what it discarded:
+    # "grounded" has to be checkable, not just claimed. Without this the actions
+    # read as history even when they are the model's own suggestions, and one of
+    # them contradicted the retrieved resolution ("no permanent capacity upgrade
+    # was required") without saying so.
     prompt = f"""You are a NOC analyst drafting a root-cause analysis (RCA).
 
 QUESTION: {question}
@@ -456,16 +463,27 @@ LIVE DATA for {cell_id}:
 KPI readings: {kpis}
 Active alarms: {alarms}
 
-RELEVANT PAST INCIDENTS (retrieved from NetOps Co.'s history):
+RETRIEVED PAST INCIDENTS (the {len(retrieved)} most similar write-ups in NetOps Co.'s
+history; they are the closest matches, which does not make them all relevant):
 {retrieved_text}
 
 Draft an RCA in this exact structure:
 Impact: ...
 Likely cause: ...
 Recommended action: ...
+Sources: ...
 
-Ground your answer in the past incidents above where relevant, and say so
-explicitly if this matches a known prior pattern.
+Rules:
+- Base the impact and the likely cause on the live data above and on the
+  retrieved incidents. Say explicitly if this matches a known prior pattern.
+- If a retrieved incident matches and its resolution still applies, make that
+  resolution the FIRST recommended action, in its own terms. What this network
+  did last time beats generic good practice.
+- Tag every recommended action with where it comes from: the file name of the
+  retrieved incident whose resolution it repeats, or [general practice] if it is
+  your own knowledge rather than something NetOps Co. has done here before.
+- Under Sources, name each retrieved document you used, then name any retrieved
+  document you did not use, with one clause saying why not.
 """
     return call_llm([{"role": "user", "content": prompt}])
 
