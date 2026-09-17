@@ -1,5 +1,5 @@
 {
-  "description": "Golden-set eval cases for Module 10. Each case is graded in two tiers, cheapest first:\n  TIER 1 (assertions): deterministic, machine-checkable facts about what the agent DID — which tools it called, in what order, what severity it asked for, which documents it retrieved. These run in milliseconds, cost nothing, and are never wrong. If a property can be expressed here, it does NOT belong in tier 2.\n  TIER 2 (ideal_answer + grading_notes): LLM-as-a-judge scoring for genuinely semantic qualities that no assertion can capture — does the recommended action actually follow from the stated cause.\nThe split is the lesson: reach for an assertion first, and use a model to judge only what a model is needed for.",
+  "description": "Golden-set eval cases for Module 10. Each case is graded in two tiers, cheapest first:\n  TIER 1 (assertions): deterministic, machine-checkable facts about what the agent DID \u2014 which tools it called, in what order, what severity it asked for, which documents it retrieved. These run in milliseconds, cost nothing, and are never wrong. If a property can be expressed here, it does NOT belong in tier 2.\n  TIER 2 (ideal_answer + grading_notes): LLM-as-a-judge scoring for genuinely semantic qualities that no assertion can capture \u2014 does the recommended action actually follow from the stated cause.\nThe split is the lesson: reach for an assertion first, and use a model to judge only what a model is needed for.",
   "cases": [
     {
       "case_id": "EVAL-01",
@@ -30,7 +30,7 @@
         "answer_must_mention": [
           "neighbor"
         ],
-        "rationale": "Neighbour-before-blame, asserted directly: before proposing a ticket the agent must have READ a neighbour — its KPIs or its alarms. The old assertion checked that lookup_topology appeared before create_ticket, which is a proxy, and a bad one: measured on 16 Sep 2026 the naive prompt scored 100% on it while touching zero neighbours. The severity ceiling is derived from the alarm feed for this case's site.",
+        "rationale": "Neighbour-before-blame, asserted directly: before proposing a ticket the agent must have READ a neighbour \u2014 its KPIs or its alarms. The old assertion checked that lookup_topology appeared before create_ticket, which is a proxy, and a bad one: measured on 16 Sep 2026 the naive prompt scored 100% on it while touching zero neighbours. The severity ceiling is derived from the alarm feed for this case's site.",
         "neighbours_checked_before_ticket": true
       }
     },
@@ -52,7 +52,7 @@
         "answer_must_mention": [
           "TCK-4455"
         ],
-        "rationale": "A within-tolerance MINOR alarm must not become a CRITICAL ticket. The ceiling is DERIVED from the alarm feed: SITE-022's worst active alarm is MINOR, so MINOR is the ceiling. Scope is enforced separately — reading CELL-031A's KPIs does not authorise filing against SITE-031."
+        "rationale": "A within-tolerance MINOR alarm must not become a CRITICAL ticket. The ceiling is DERIVED from the alarm feed: SITE-022's worst active alarm is MINOR, so MINOR is the ceiling. Scope is enforced separately \u2014 reading CELL-031A's KPIs does not authorise filing against SITE-031."
       }
     },
     {
@@ -70,6 +70,9 @@
       "grading_notes": "Tests whether RAG retrieval (Module 4) is actually being used: a good answer should reference the *relevant* prior incident (the event-venue one, not the neighbor-outage one) and correctly distinguish between the two similar-looking but differently-caused congestion patterns.",
       "assertions": {
         "name": "Retrieval discrimination",
+        "must_rank_first": [
+          "incident_001_local_event_congestion.md"
+        ],
         "must_retrieve": [
           "incident_001_local_event_congestion.md"
         ],
@@ -79,7 +82,7 @@
         "answer_must_mention": [
           "event"
         ],
-        "rationale": "Two prior incidents look similar and have different causes. This asserts the retriever picked the recurring-event pattern over the neighbour-outage pattern — the distinction RAG exists to make. Graded against the Module 4 drafter, because retrieval is what the drafter does."
+        "rationale": "Two prior incidents look similar and have different causes. This asserts the retriever RANKED the recurring-event pattern first \u2014 not merely that it appeared somewhere in the top two, which passed for months while dense embeddings put a VoLTE postmortem on top. Graded against the Module 4 drafter, because retrieval is what the drafter does."
       }
     }
   ]

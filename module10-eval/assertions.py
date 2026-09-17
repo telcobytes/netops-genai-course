@@ -110,6 +110,17 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
         retrieved.extend(step.get("retrieved", []) or [])
     retrieved_blob = " ".join(retrieved).lower()
 
+    # RANK, not membership. `must_retrieve` asks whether a document appears
+    # anywhere in the top k, which is a weaker claim than it reads as: measured
+    # 16 Sep 2026, EVAL-03 passed it for months while dense retrieval ranked a
+    # VoLTE postmortem FIRST for a congestion question. An assertion that a wrong
+    # top hit can satisfy is not testing the thing it names.
+    for doc in spec.get("must_rank_first", []):
+        top = retrieved[0] if retrieved else ""
+        ok = doc.lower() in top.lower()
+        record(f"ranks {doc} first", ok,
+               "top hit" if ok else f"top hit was {top or '(nothing retrieved)'}")
+
     for doc in spec.get("must_retrieve", []):
         ok = doc.lower() in retrieved_blob
         record(f"retrieves {doc}", ok, "retrieved" if ok else "not in retrieved set")
