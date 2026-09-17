@@ -12,6 +12,21 @@ offline bag-of-words keyword vectorizer if offline.
 
 Run:
     python rag_pipeline.py
+
+HOW IT FITS TOGETHER, IN PLAIN TERMS
+Think of the knowledge base as a filing cabinet of old incident reports. When a
+new ticket comes in, a good NOC engineer does not re-read the whole cabinet.
+They pull the two or three reports that look most like today's problem, read
+those, and then write the RCA. This file does the same thing in five steps:
+
+  1. Chunk      cut each report into paragraph-sized cards
+  2. Embed      turn each card into a list of numbers that captures what it is about
+  3. Query      decide what to search the cabinet with (not always the ticket text)
+  4. Retrieve   score every card against the search and keep the best two reports
+  5. Augment    paste those two reports into the prompt, then ask the LLM
+
+Steps 1 and 2 run once over the whole knowledge base. Steps 3 to 5 run for every
+new ticket.
 """
 
 import glob
@@ -30,6 +45,17 @@ KB_DIR = os.path.join(DATA_DIR, "knowledge_base")
 
 
 # ---------- Step 1: Structure-Aware Chunk ----------
+# Why cut documents up at all? An incident report covers several things: what
+# happened, the root cause, the fix, the lessons. A ticket about slow evening
+# speeds matches the Summary paragraph strongly and the Lessons Learned bullets
+# hardly at all. Scoring the report as one blob blurs those together, so we
+# score each paragraph ("chunk") on its own. The 4 documents become 24 chunks.
+#
+# Why paragraphs and not, say, every 500 characters? A fixed character count
+# cuts wherever it lands -- mid-sentence, or halfway through a numbered SOP
+# step -- and half a step means nothing on its own. Blank lines are where the
+# author already decided one idea ends and the next begins.
+
 def _document_context(text):
     """The title line and the site this document is about — the two facts that
     identify every chunk in it."""
@@ -73,8 +99,18 @@ def load_and_chunk_knowledge_base(kb_dir=None):
         with open(path, encoding="utf-8") as f:
             text = f.read()
         context = _document_context(text)
+        # "\n\n" is a blank line: the boundary between paragraphs and sections.
         paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
         for para in paragraphs:
+            # Every chunk gets its document's title and site stuck on top, so the
+            # Summary paragraph of incident_001 is stored as:
+            #
+            #   [Incident Postmortem: Localized Congestion Near a Public Event Venue — SITE-031 (CELL-031A)]
+            #   ## Summary
+            #   A cell adjacent to a public event venue experienced a sharp rise...
+            #
+            # Without that first line, the paragraph never mentions SITE-031, and a
+            # search for SITE-031 could not find it.
             body = f"[{context}]\n{para}" if context else para
             chunks.append({
                 "text": body,            # what gets embedded
@@ -86,16 +122,49 @@ def load_and_chunk_knowledge_base(kb_dir=None):
 
 
 # ---------- Step 2: Embed (Semantic Vectors with Offline Fallback) ----------
+# A computer cannot compare two paragraphs directly, but it can compare two lists
+# of numbers. "Embedding" means turning text into such a list, called a vector.
+#
+# Two ways to do that live in this file:
+#
+#   Dense embeddings (Gemini, the default with a key). A model reads the text and
+#   outputs 768 numbers that capture what it is ABOUT. Texts about similar things
+#   get similar numbers even when they share no words. "Similar" is the model's
+#   idea, though: same topic and same kind of wording, not necessarily the same
+#   fault. Nobody can read the 768 numbers individually; only comparisons mean
+#   anything.
+#
+#   Bag of words (offline fallback, no key). Count how often each word appears.
+#   Simple and free, but it only sees spelling, not meaning -- see _vectorize.
+
 def _tokenize(text):
+    # Lowercase and keep runs of letters and digits:
+    #   "PRB utilization climbed above 90%"  ->  ["prb", "utilization", "climbed", "above", "90"]
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
 def _vectorize(tokens, vocab):
+    # One number per word in the vocabulary: how many times that word appears.
+    # With vocab ["90", "above", "climbed", "looks", "normal", "prb", "utilization"]:
+    #   "PRB utilization climbed above 90%"  ->  [1, 1, 1, 0, 0, 1, 1]
+    #   "PRB utilization looks normal"       ->  [0, 0, 0, 1, 1, 1, 1]
+    # Those two say opposite things, yet they share "prb" and "utilization" and
+    # score 0.45 -- the weakness of matching on words instead of meaning.
     counts = Counter(tokens)
     return [counts.get(word, 0) for word in vocab]
 
 
 def _cosine_similarity(a, b):
+    # How closely two vectors point the same way; in practice between 0 and 1 here.
+    # Picture two sector antennas: same azimuth scores 1.0, 90 degrees apart
+    # scores 0.0. It is literally the cosine of the angle between the two vectors.
+    # It compares direction, not length, so a long report and a one-line query
+    # can still score high if they are about the same thing.
+    #
+    # Reading the numbers: bag-of-words scores 0.0 when nothing is shared. Dense
+    # embeddings rarely go that low -- in this course, related telecom text scores
+    # roughly 0.6 to 0.9 -- so only compare scores against each other, for the
+    # same search.
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -126,6 +195,22 @@ _chunk_vector_cache = {}
 
 
 # ---------- Step 3: Construct the Query ----------
+# The retriever finds text that SOUNDS LIKE whatever you search with -- including
+# how the problem was reported. So instead of searching with the ticket as
+# written, search with what the network measured, in the same language the
+# incident reports use. For TCK-4471 on CELL-031A:
+#
+#   Ticket (goes into the prompt, unchanged):
+#     "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 ..."
+#
+#   Search text (built below from live alarms and KPIs):
+#     "high prb utilization rrc drop rate high backhaul latency warning
+#      cell congestion prb utilization rrc drop rate rrc setup success rate
+#      CELL-031A SITE-031"
+#
+# It is what an experienced engineer types into the ticket search: "PRB high
+# CELL-031A", not the customer's complaint.
+
 def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id="",
                           style="measured+question"):
     """Decide WHAT YOU EMBED. The question is what the customer wrote; the query
@@ -164,12 +249,17 @@ def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id=
         return question
 
     parts = []
+    # Alarm names, made readable: "HIGH_PRB_UTILIZATION" -> "high prb utilization"
     for a in (alarms or []):
         if a.get("alarm_type"):
             parts.append(a["alarm_type"].replace("_", " ").lower())
+    # KPIs that crossed a threshold, by name only: "rrc_drop_rate_pct" -> "rrc drop rate".
+    # The values (11.4%, threshold 5%) are left out: embeddings are poor at
+    # comparing numbers, and the KIND of problem is what matches past incidents.
     for t in ((kpis or {}).get("thresholds_crossed") or []):
         if t.get("metric"):
             parts.append(t["metric"].replace("_pct", "").replace("_", " "))
+    # The cell and site, so incidents on this site rank higher.
     for ident in (cell_id, site_id):
         if ident:
             parts.append(str(ident))
@@ -184,6 +274,17 @@ def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id=
 
 
 # ---------- Step 4: Retrieve ----------
+# Retrieval is ranking, not lookup. There is no "match" or "no match": every one
+# of the 24 chunks gets a similarity score against the search text, the list is
+# sorted, and the best ones are kept. It always returns something, even when
+# nothing in the knowledge base is relevant -- so the failure to watch for is
+# the WRONG document coming first, not an empty result.
+#
+# Measured example (Gemini, 17 Sep 2026), searching with TCK-4471 as written:
+#   0.789  incident_003_volte_call_drops.md          <- ranked first, wrong fault
+#   0.788  incident_001_local_event_congestion.md    <- the right answer
+# A 0.001 gap decided it. That is why step 3 exists.
+
 def _top_k(scored, k, per_source):
     """Turn a full ranking into the k results to return.
 
@@ -201,6 +302,9 @@ def _top_k(scored, k, per_source):
     """
     if not per_source:
         return [c for c, _ in scored[:k]]
+    # Walk down the ranking and keep only the first (best) chunk from each report.
+    # Example raw ranking:  incident_001, incident_001, incident_002, incident_003
+    # k=2 returns:          incident_001, incident_002
     best, seen = [], set()
     for chunk, _ in scored:
         if chunk["source"] in seen:
@@ -242,6 +346,8 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
                 raise RuntimeError(
                     f"embedded {len(chunk_vectors)} vectors for {len(chunks)} chunks")
 
+            # Score every chunk against the query and sort, highest first (the minus
+            # sign flips Python's default smallest-first order).
             scored = sorted(
                 zip(chunks, chunk_vectors),
                 key=lambda pair: -_cosine_similarity(query_vector, pair[1]),
@@ -261,7 +367,9 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
             print("              Fix:    python data/llm_client.py --embeddings")
             print("!" * 70 + "\n")
 
-    # Offline Bag-of-Words fallback (runs without API keys)
+    # Offline Bag-of-Words fallback (runs without API keys). Same ranking idea, but
+    # the vectors are word counts. The vocabulary is every word in every chunk
+    # plus the query, so all vectors have the same length and can be compared.
     all_token_lists = [_tokenize(c["text"]) for c in chunks] + [_tokenize(query)]
     vocab = sorted(set(tok for toks in all_token_lists for tok in toks))
     vectors = [_vectorize(toks, vocab) for toks in all_token_lists]
@@ -275,6 +383,15 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
 
 
 # ---------- Step 5: Augment ----------
+# "Augment" just means adding to the prompt. The LLM still writes the RCA, but it
+# now reads three things before answering:
+#   - the question, exactly as the ticket put it
+#   - live data: current KPI readings and active alarms for the cell
+#   - the two past incident write-ups step 4 retrieved
+# That is the "book open" answer: instead of guessing from general telecom
+# knowledge, the model can say "this matches incident_001" and point to what
+# NetOps Co. did last time.
+
 def draft_grounded_rca(cell_id: str, question: str, trace: list | None = None,
                        query_style: str = "measured+question") -> str:
     """Draft an RCA grounded in retrieved prior incidents.
