@@ -121,7 +121,7 @@ Three graded self-tests — `starter.py` has the TODOs, `check.py` prints PASS o
 
 ## Course Architecture Reference
 
-For an end-to-end architecture breakdown, 3GPP prompt templates, cognitive circuit breaker rules, and resume portfolio snippets, see:
+For an end-to-end architecture breakdown, prompt templates, cognitive circuit breaker rules, and resume portfolio snippets, see:
 👉 **[`telecom-autonomous-agent-cheat-sheet.md`](telecom-autonomous-agent-cheat-sheet.md)**
 
 ---

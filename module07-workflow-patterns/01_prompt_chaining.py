@@ -34,7 +34,12 @@ FAULT_DOMAINS = ["RADIO_ACCESS_INTERFERENCE", "CAPACITY_PRB_EXHAUSTION",
 
 
 def link_1_classify(alarm: dict, kpis: dict) -> str:
-    """Link 1: put the alarm in exactly one 3GPP fault bucket."""
+    """Link 1: put the alarm in exactly one fault bucket.
+
+    The four buckets are this course's taxonomy, not a 3GPP-defined list --
+    an editorial choice that suits a RAN/transport NOC. The chaining pattern
+    is what transfers; the strings are yours to choose.
+    """
     prompt = f"""Classify this alarm into EXACTLY ONE of these fault domains:
 {', '.join(FAULT_DOMAINS)}
 
@@ -96,7 +101,7 @@ def run(cell_id: str = "CELL-031A") -> None:
     if domain not in FAULT_DOMAINS:
         print(f"{RED}    CHAIN BROKEN: '{domain}' is not a known fault domain. Stopping.{RESET}")
         return
-    print(f"{GREEN}    validated: known 3GPP domain{RESET}")
+    print(f"{GREEN}    validated: known fault domain{RESET}")
 
     step(2, "Draft the RCA")
     rca = link_2_draft_rca(alarm, kpis, domain)

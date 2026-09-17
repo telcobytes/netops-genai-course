@@ -10,7 +10,7 @@ A durable reference guide for building and deploying AI agents in Mobile Network
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ LAYER 5: OPERATIONAL OUTPUT & ACTIONS                                        │
 │ • Formats: Structured JSON Schema (RFC-7159)                                │
-│ • Artifacts: Shift-handoff briefings, 3GPP fault categorization, RCA drafts │
+│ • Artifacts: Shift-handoff briefings, fault categorization, RCA drafts      │
 │ • Systems: ServiceNow, Jira, Remedy, Slack Incident Channels                │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ LAYER 4: SAFETY, EVALS & GUARDRAILS                                         │
@@ -22,7 +22,7 @@ A durable reference guide for building and deploying AI agents in Mobile Network
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ LAYER 3: COGNITIVE REASONING ENGINE                                         │
 │ • Loop: ReAct (Reason → Act → Observe)                                       │
-│ • Cost-Ordered Diagnostic: RF/Physical → Transport → Signaling → Core       │
+│ • Cost-Ordered Diagnostic: RF/Physical → Transport → Signalling → Core       │
 │ • Circuit Breakers: Hard step budget (`max_steps=5`) & cycle detection       │
 │ • Memory Architecture: Ephemeral scratchpad + working session state         │
 │ • Packaging: Platform-agnostic Skills and SOP playbooks                      │
@@ -51,24 +51,29 @@ A durable reference guide for building and deploying AI agents in Mobile Network
 
 ---
 
-## 3. Production Prompt Template: 3GPP Fault Taxonomy Enforcement
+## 3. Production Prompt Template: Fault Taxonomy Enforcement
 
-Use few-shot examples to constrain the agent's root-cause taxonomy to deterministic 3GPP operational buckets:
+Constrain the agent's root-cause taxonomy to a fixed set of operational buckets. The four
+below are the ones this course uses end to end — they are an editorial choice that suits a
+RAN/transport NOC, not a standardised list. Pick the set your own org triages by, then
+enforce it; the technique is what transfers, not these four strings.
+
+> The template below is written for a production feed and names counters the course's mock
+> tools do not supply (CQI, GTP-U loss). The `confidence` field is Module 3's exercise 4.
 
 ```text
 You are NetOps Co.'s Lead NOC Triage Specialist.
-Analyze the provided telemetry and categorize the root cause STRICTLY into one of the following 3GPP fault domains:
+Analyze the provided telemetry and categorize the root cause STRICTLY into one of the following fault domains:
 - CAPACITY_PRB_EXHAUSTION
 - RADIO_ACCESS_INTERFERENCE
 - TRANSPORT_BACKHAUL_JITTER
 - CORE_SIGNALING_REJECT
-- HARDWARE_EQUIPMENT_FAULT
 
 [FEW-SHOT EXAMPLES]
 Input: High DL PRB utilization (>90%), CQI stable (11-13), connected users > 350, zero active alarms.
 Output: {"category": "CAPACITY_PRB_EXHAUSTION", "confidence": 0.95, "justification": "PRB exhaustion driven by user density without radio degradation."}
 
-Input: Sudden spike in RRC connection drops, CQI dropped to < 5, neighbor site CELL-022A active TX alarm.
+Input: Sudden spike in RRC connection drops, CQI dropped to < 5, a neighbouring site reporting an active TX alarm.
 Output: {"category": "RADIO_ACCESS_INTERFERENCE", "confidence": 0.91, "justification": "Neighbor cell RF interference causing downlink SINR deterioration."}
 
 Input: Normal radio metrics, high uplink latency (>85ms), GTP-U packet loss detected on microwave backhaul hop.
