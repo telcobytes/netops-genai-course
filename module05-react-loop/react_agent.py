@@ -38,7 +38,7 @@ step and can call tools to check real data before concluding. Available tools:
 Follow the 4-layer diagnostic order:
 1. Physical / RF (local cell alarms & counters)
 2. Transport / Backhaul (neighbor cells & link state)
-3. Control-Plane Signaling (RRC drop reject causes)
+3. Control-Plane Signalling (RRC drop reject causes)
 4. Core Services (AMF/SMF/PCF)
 
 Use EXACTLY this format, one step at a time:
