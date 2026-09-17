@@ -11,7 +11,7 @@ Module 4 teaches RAG as five steps: chunk, embed, construct the query, retrieve,
 augment. Step 3 is the one most RAG code skips: it embeds the user's text as-is.
 This lab shows what that costs.
 
-Here is EVAL-03's ticket:
+Here is TCK-4471, the ticket this module follows (eval case EVAL-03):
 
     "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 during
      evening peak hours for the past three days, with no specific alarm cited yet."
@@ -48,6 +48,7 @@ Query construction only changes what you SEARCH with.
 import argparse
 import os
 import sys
+import textwrap
 
 # Let Python find the course's shared code: data/ holds mock_tools.py (the fake
 # network: KPIs, alarms, topology) and this folder holds rag_pipeline.py.
@@ -58,9 +59,13 @@ sys.path.append(HERE)
 import rag_pipeline as R                                  # noqa: E402
 from mock_tools import get_active_alarms, get_cell_kpis   # noqa: E402
 
-# Terminal colour codes, so PASS prints green and FAIL prints red.
-BOLD, DIM, GRN, RED, CYN, OFF = (
-    "\033[1m", "\033[2m", "\033[92m", "\033[91m", "\033[96m", "\033[0m")
+# Terminal colour codes, so PASS prints green and FAIL prints red. Switched off
+# when the output is piped to a file or a notebook, where they print as noise.
+if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+    BOLD, DIM, GRN, RED, CYN, OFF = (
+        "\033[1m", "\033[2m", "\033[92m", "\033[91m", "\033[96m", "\033[0m")
+else:
+    BOLD = DIM = GRN = RED = CYN = OFF = ""
 
 # The scenario: the cell and site the ticket is about, the ticket text, and the
 # document that SHOULD come back first. incident_001 is the congestion
@@ -79,13 +84,14 @@ RUNGS = [
 
 
 def short(name):
-    # Shorten file names for the printout:
-    #   "incident_003_volte_call_drops.md" -> "inc_3 (VoLTE)"
+    # Shorten file names for the printout, and carry the SITE: incident_003 losing
+    # or winning is only interesting once you see it is a different cell.
+    #   "incident_003_volte_call_drops.md" -> "inc_3 (VoLTE · SITE-022)"
     return name.replace("incident_00", "inc_").replace(".md", "") \
-               .replace("_local_event_congestion", " (congestion)") \
-               .replace("_neighbor_outage_overflow", " (neighbour outage)") \
-               .replace("_volte_call_drops", " (VoLTE)") \
-               .replace("reference_congestion_and_handover_basics", "reference")
+               .replace("_local_event_congestion", " (congestion · SITE-031)") \
+               .replace("_neighbor_outage_overflow", " (neighbour outage · SITE-031)") \
+               .replace("_volte_call_drops", " (VoLTE · SITE-022)") \
+               .replace("reference_congestion_and_handover_basics", "reference (no site)")
 
 
 def main():
@@ -117,6 +123,9 @@ def main():
         print(f"{DIM}  Offline bag-of-words matches words, not meaning, and does not reproduce\n"
               f"  the rung 1 failure. Expect all three rungs to pass. Run with a key to see\n"
               f"  the real thing.{OFF}\n")
+    else:
+        print(f"{DIM}  Embedding the 24 chunks once, then one call per rung: 27 calls, well\n"
+              f"  under a minute. Scores are cosine similarity, 0 to 1.{OFF}\n")
 
     results = []
     for style, what, aside in RUNGS:
@@ -125,21 +134,26 @@ def main():
         # Step 4: score all 24 chunks against it and keep the top 3. per_source=False
         # shows raw chunks, so one incident can take several slots -- which is how
         # you see a winner dominate (offline, rung 1 gives incident_001 slots 1 and 2).
-        ranked = R.retrieve(q, chunks, k=3, per_source=False)
+        ranked = R.retrieve(q, chunks, k=3, per_source=False, with_scores=True)
         # PASS if the congestion postmortem is ranked first. Measured with Gemini,
         # rung 1 put incident_003 (VoLTE) first by 0.001; rungs 2 and 3 put
         # incident_001 first. Step 5 (the LLM) never runs here: this lab is only
         # about which document the search finds.
-        top = ranked[0]["source"] if ranked else ""
+        top = ranked[0][0]["source"] if ranked else ""
         ok = WANT in top
         results.append((style, ok))
 
         mark = f"{GRN}PASS{OFF}" if ok else f"{RED}FAIL{OFF}"
         print(f"  {mark}  {BOLD}{style}{OFF} — {what}  {DIM}({aside}){OFF}")
-        print(f"        embedded: {DIM}{q[:96]}{'...' if len(q) > 96 else ''}{OFF}")
-        for i, m in enumerate(ranked, 1):
+        # The whole search text, wrapped. Truncating it hid the only difference
+        # between rungs 2 and 3, which is the point of the comparison.
+        print(f"{DIM}        searched with:{OFF}")
+        print(DIM + textwrap.fill(q, width=74, initial_indent=" " * 10,
+                                  subsequent_indent=" " * 10) + OFF)
+        print(f"{DIM}        top 3 chunks (raw, so one document can hold several slots):{OFF}")
+        for i, (m, score) in enumerate(ranked, 1):
             flag = f"  {CYN}<- ranked first{OFF}" if i == 1 else ""
-            print(f"          {i}. {short(m['source'])}{flag}")
+            print(f"          {i}. {score:.3f}  {short(m['source'])}{flag}")
         print()
 
     # rag_pipeline.last_engine is set by retrieve() itself, so this is the engine
@@ -166,6 +180,9 @@ def main():
   reported.{OFF} Ticket numbers, who raised it, and whether an alarm was cited
   are routing metadata. They belong in the ticket. They do not belong in a
   vector.
+
+  The ticket itself is not thrown away: it still goes into the prompt, word for
+  word. Step 3 changes what you SEARCH with, not what you ASK.
 """)
     elif R.last_engine == "Offline keyword vectorizer":
         print("""

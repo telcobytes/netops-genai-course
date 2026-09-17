@@ -291,8 +291,12 @@ last_engine = None
 #   0.788  incident_001_local_event_congestion.md    <- the right answer
 # A 0.001 gap decided it. That is why step 3 exists.
 
-def _top_k(scored, k, per_source):
+def _top_k(scored, k, per_source, with_scores=False):
     """Turn a full ranking into the k results to return.
+
+    scored is [(chunk, similarity)], highest first. Returns chunks, or
+    (chunk, similarity) pairs when with_scores=True -- the lab prints the scores
+    so you can see how close the top two were.
 
     per_source=True gives k DOCUMENTS, represented by their best-scoring chunk --
     "the 2 most relevant past incidents", not two slices of one. Ranking stays
@@ -307,27 +311,29 @@ def _top_k(scored, k, per_source):
     per_source=False is the raw chunk ranking, kept so the lab can show both.
     """
     if not per_source:
-        return [c for c, _ in scored[:k]]
-    # Walk down the ranking and keep only the first (best) chunk from each report.
-    # Example raw ranking:  incident_001, incident_001, incident_002, incident_003
-    # k=2 returns:          incident_001, incident_002
-    best, seen = [], set()
-    for chunk, _ in scored:
-        if chunk["source"] in seen:
-            continue
-        seen.add(chunk["source"])
-        best.append(chunk)
-        if len(best) == k:
-            break
-    return best
+        best = list(scored[:k])
+    else:
+        # Walk down the ranking and keep only the first (best) chunk from each report.
+        # Example raw ranking:  incident_001, incident_001, incident_002, incident_003
+        # k=2 returns:          incident_001, incident_002
+        best, seen = [], set()
+        for chunk, score in scored:
+            if chunk["source"] in seen:
+                continue
+            seen.add(chunk["source"])
+            best.append((chunk, score))
+            if len(best) == k:
+                break
+    return best if with_scores else [c for c, _ in best]
 
 
-def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
+def retrieve(query, chunks, k=2, prefer_api=True, per_source=True, with_scores=False):
     """Find the k most relevant past incidents, using cosine similarity.
 
     Ranking is over chunks; selection is one chunk per source document, so k=2
     means two different incidents rather than two sections of one. Pass
-    per_source=False for the raw chunk ranking.
+    per_source=False for the raw chunk ranking, and with_scores=True to get
+    (chunk, similarity) pairs instead of chunks.
 
     Uses Gemini semantic embeddings if available; falls back to offline keyword vectors.
     """
@@ -353,14 +359,15 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
                 raise RuntimeError(
                     f"embedded {len(chunk_vectors)} vectors for {len(chunks)} chunks")
 
-            # Score every chunk against the query and sort, highest first (the minus
-            # sign flips Python's default smallest-first order).
+            # Score every chunk against the query, then sort highest first (the
+            # minus sign flips Python's default smallest-first order).
             scored = sorted(
-                zip(chunks, chunk_vectors),
-                key=lambda pair: -_cosine_similarity(query_vector, pair[1]),
+                ((c, _cosine_similarity(query_vector, v))
+                 for c, v in zip(chunks, chunk_vectors)),
+                key=lambda pair: -pair[1],
             )
             last_engine = "Gemini dense embeddings"
-            return _top_k(scored, k, per_source)
+            return _top_k(scored, k, per_source, with_scores)
         except Exception as e:
             # Falling back to keyword vectors is right when there is no key.
             # It is NOT right when a key is present and embeddings broke — this
@@ -384,11 +391,12 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
     query_vector, chunk_vectors = vectors[-1], vectors[:-1]
 
     scored = sorted(
-        zip(chunks, chunk_vectors),
-        key=lambda pair: -_cosine_similarity(query_vector, pair[1]),
+        ((c, _cosine_similarity(query_vector, v))
+         for c, v in zip(chunks, chunk_vectors)),
+        key=lambda pair: -pair[1],
     )
     last_engine = "Offline keyword vectorizer"
-    return _top_k(scored, k, per_source)
+    return _top_k(scored, k, per_source, with_scores)
 
 
 # ---------- Step 5: Augment ----------
