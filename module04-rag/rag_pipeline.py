@@ -273,6 +273,12 @@ def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id=
     return measured if style == "measured" else f"{measured}. {question}"
 
 
+# Which engine actually ranked, set by retrieve() once it has run. Having a key is
+# not the same as the embedding call working, so anything that wants to report the
+# engine reads this AFTER retrieving instead of guessing from the environment.
+last_engine = None
+
+
 # ---------- Step 4: Retrieve ----------
 # Retrieval is ranking, not lookup. There is no "match" or "no match": every one
 # of the 24 chunks gets a similarity score against the search text, the list is
@@ -325,6 +331,7 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
 
     Uses Gemini semantic embeddings if available; falls back to offline keyword vectors.
     """
+    global last_engine
     api_key_available = bool(os.environ.get("GEMINI_API_KEY"))
 
     if prefer_api and api_key_available:
@@ -352,6 +359,7 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
                 zip(chunks, chunk_vectors),
                 key=lambda pair: -_cosine_similarity(query_vector, pair[1]),
             )
+            last_engine = "Gemini dense embeddings"
             return _top_k(scored, k, per_source)
         except Exception as e:
             # Falling back to keyword vectors is right when there is no key.
@@ -379,6 +387,7 @@ def retrieve(query, chunks, k=2, prefer_api=True, per_source=True):
         zip(chunks, chunk_vectors),
         key=lambda pair: -_cosine_similarity(query_vector, pair[1]),
     )
+    last_engine = "Offline keyword vectorizer"
     return _top_k(scored, k, per_source)
 
 
@@ -464,9 +473,6 @@ if __name__ == "__main__":
     chunks = load_and_chunk_knowledge_base()
     print(f"Loaded {len(chunks)} chunks from {KB_DIR}\n")
 
-    mode = "Gemini dense embeddings" if os.environ.get("GEMINI_API_KEY") else "Offline keyword vectorizer"
-    print(f"Retrieval Engine: {mode}")
-
     # Build the query the same way draft_grounded_rca does, so the ranking printed
     # here is the ranking the RCA below is grounded in -- not the raw question's.
     kpis = get_cell_kpis(cell_id)
@@ -480,6 +486,11 @@ if __name__ == "__main__":
           "  Run lab_query_construction.py to compare the three query styles.")
 
     top_matches = retrieve(query, chunks, k=2)
+    # Printed after retrieving, not before: this is what ranked, not what we hoped
+    # would rank. With a key that failed mid-run, it says "Offline keyword vectorizer"
+    # and the warning above says why.
+    print(f"\nRetrieval engine used: {last_engine}")
+
     print("\n--- Top 2 retrieved documents (best chunk of each) ---")
     for m in top_matches:
         print(f"\n[{m['source']}]\n{m.get('excerpt', m['text'])[:200]}...")
