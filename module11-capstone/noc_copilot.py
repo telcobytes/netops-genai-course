@@ -42,6 +42,7 @@ RESET = "\033[0m"
 
 # The severity order lives in guardrails.py. One file owns it.
 from guardrails import SEVERITY_RANK  # noqa: E402
+from llm_client import format_usage, reset_usage  # noqa: E402
 
 
 def load_rca_procedure() -> str:
@@ -162,6 +163,7 @@ def run_noc_copilot():
     print(f"{BOLD}{CYAN}         NETOPS CO. — AUTONOMOUS NOC COPILOT (CAPSTONE)               {RESET}")
     print(f"{BOLD}{CYAN}======================================================================{RESET}\n")
 
+    reset_usage()          # measure THIS run, not whatever ran before it
     rca_procedure = load_rca_procedure()
     alarms_to_triage = detect()
 
@@ -188,6 +190,10 @@ def run_noc_copilot():
                    f"budget.]{RESET}")
 
         print(f"\n{BOLD}{GREEN}--- Final Verified RCA for {inc['incident_id']} ---{RESET}\n{rca}")
+
+    # "What did that cost?" is the first question anyone's manager asks, and the
+    # only honest answer is a measured one. Read from usage_metadata, not asserted.
+    print(f"\n{CYAN}{format_usage('this capstone run')}{RESET}")
 
 
 if __name__ == "__main__":

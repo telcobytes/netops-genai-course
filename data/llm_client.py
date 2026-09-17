@@ -116,14 +116,84 @@ def _is_retired(exc):
     )
 
 
+# ---------------------------------------------------------------------------
+# Token accounting.
+#
+# "What does this agent cost to run?" is the first question anyone's manager
+# asks, and the honest answer has to be MEASURED. Every call in this course goes
+# through _generate, so counting here catches call_llm and call_llm_tools alike
+# and no lab has to remember to opt in.
+#
+# Deliberately NO dollar figure. This course does not pin a model (see
+# MODEL_CANDIDATES), prices differ per model and change without notice, and a
+# hardcoded cost is exactly the kind of number that is wrong by an order of
+# magnitude and never gets rechecked. Tokens are the thing you measured; price
+# is a lookup you do on the day, against the model you actually resolved to.
+#
+# Watch the PROMPT column rather than the output column. In a tool-calling loop
+# the entire conversation is resent every turn, so an eight-call investigation
+# pays for its own history eight times. That, not the length of the final
+# answer, is where an agent's bill comes from.
+_usage = {"calls": 0, "prompt": 0, "output": 0, "thoughts": 0, "total": 0}
+
+
+def reset_usage():
+    """Zero the counters — call before the run you want to measure."""
+    for k in _usage:
+        _usage[k] = 0
+
+
+def get_usage():
+    """A copy of the counters since the last reset."""
+    return dict(_usage)
+
+
+def _record_usage(response):
+    """Accumulate one response's usage_metadata. Never raises: a missing or
+    renamed field must not take down a lab whose subject is something else."""
+    try:
+        u = getattr(response, "usage_metadata", None)
+        if u is None:
+            return
+        _usage["calls"] += 1
+        _usage["prompt"] += getattr(u, "prompt_token_count", 0) or 0
+        _usage["output"] += getattr(u, "candidates_token_count", 0) or 0
+        _usage["thoughts"] += getattr(u, "thoughts_token_count", 0) or 0
+        total = getattr(u, "total_token_count", 0) or 0
+        _usage["total"] += total or (_usage["prompt"] + _usage["output"])
+    except Exception:
+        pass
+
+
+def format_usage(label="this run"):
+    """One line, or a short block, for a lab to print at the end of a run."""
+    u = get_usage()
+    if not u["calls"]:
+        return f"[tokens] {label}: no model calls recorded"
+    share = (100 * u["prompt"] // u["total"]) if u["total"] else 0
+    line = (f"[tokens] {label}: {u['calls']} model call(s)  ·  "
+            f"prompt {u['prompt']:,}  ·  output {u['output']:,}")
+    if u["thoughts"]:
+        line += f"  ·  thinking {u['thoughts']:,}"
+    line += f"  ·  total {u['total']:,}"
+    if u["calls"] > 1:
+        line += (f"\n          {share}% of it is prompt — the conversation is resent "
+                 f"every turn, so a long investigation pays for its own history.")
+    line += (f"\n          Multiply by your model's current per-token price. This course "
+             f"does not pin a model, so it does not quote one.")
+    return line
+
+
 def _generate(client, model, contents, config):
     """client.models.generate_content, with one safeguard: if the model has been
     retired, move to the next candidate rather than dying with a traceback."""
     global _resolved
     if model:                       # caller named a model explicitly — respect it
-        return client.models.generate_content(
+        response = client.models.generate_content(
             model=model, contents=contents, config=config,
         )
+        _record_usage(response)
+        return response
     tried = []
     for candidate in _model_order():
         try:
@@ -135,6 +205,7 @@ def _generate(client, model, contents, config):
                     print("[llm_client] not available to this key: "
                           f"{', '.join(tried)} — using {candidate} instead.")
                 _resolved = candidate
+            _record_usage(response)
             return response
         except Exception as exc:
             if not _is_retired(exc):
