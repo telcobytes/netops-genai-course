@@ -11,7 +11,7 @@ Module 4 teaches RAG as five steps: chunk, embed, construct the query, retrieve,
 augment. Step 3 is the one most RAG code skips: it embeds the user's text as-is.
 This lab shows what that costs.
 
-Here is EVAL-03's ticket, which the drafter used to embed whole:
+Here is EVAL-03's ticket:
 
     "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 during
      evening peak hours for the past three days, with no specific alarm cited yet."
@@ -21,9 +21,23 @@ it. Watch which document comes back first.
 
 FAIL -> FIX -> PASS
 -------------------
+The lab runs the same search three ways. Think of them as rungs on a ladder:
+each one changes only the text we search with, and nothing else.
+
   RUNG 1  style="question"           embed the ticket, whole
   RUNG 2  style="measured"           embed the alarms and the KPI thresholds
   RUNG 3  style="measured+question"  measured facts first, ticket after
+
+What each rung actually searches with, for CELL-031A:
+
+  RUNG 1  "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 ..."
+  RUNG 2  "high prb utilization rrc drop rate high backhaul latency warning cell
+           congestion prb utilization rrc drop rate rrc setup success rate
+           CELL-031A SITE-031"
+  RUNG 3  the rung 2 text, then ". ", then the rung 1 text
+
+Same knowledge base, same embedding model, same scoring. If the top result
+changes between rungs, the search text is the only possible reason.
 
 Rung 1 is not a strawman. It is what most RAG code does, because embedding the
 user's text is the obvious thing to do.
@@ -35,6 +49,8 @@ import argparse
 import os
 import sys
 
+# Let Python find the course's shared code: data/ holds mock_tools.py (the fake
+# network: KPIs, alarms, topology) and this folder holds rag_pipeline.py.
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(HERE, "..", "data"))
 sys.path.append(HERE)
@@ -42,14 +58,19 @@ sys.path.append(HERE)
 import rag_pipeline as R                                  # noqa: E402
 from mock_tools import get_active_alarms, get_cell_kpis   # noqa: E402
 
+# Terminal colour codes, so PASS prints green and FAIL prints red.
 BOLD, DIM, GRN, RED, CYN, OFF = (
     "\033[1m", "\033[2m", "\033[92m", "\033[91m", "\033[96m", "\033[0m")
 
+# The scenario: the cell and site the ticket is about, the ticket text, and the
+# document that SHOULD come back first. incident_001 is the congestion
+# postmortem for this exact cell; if it ranks first, the rung passes.
 CELL, SITE = "CELL-031A", "SITE-031"
 QUESTION = ("A trouble ticket (TCK-4471) reports slow data speeds near SITE-031 during "
             "evening peak hours for the past three days, with no specific alarm cited yet.")
 WANT = "incident_001_local_event_congestion.md"
 
+# (style passed to build_retrieval_query, what it does, a short aside for the printout)
 RUNGS = [
     ("question", "embed the ticket, whole", "what most RAG code does"),
     ("measured", "embed the alarms + crossed KPI thresholds", "no prose at all"),
@@ -58,6 +79,8 @@ RUNGS = [
 
 
 def short(name):
+    # Shorten file names for the printout:
+    #   "incident_003_volte_call_drops.md" -> "inc_3 (VoLTE)"
     return name.replace("incident_00", "inc_").replace(".md", "") \
                .replace("_local_event_congestion", " (congestion)") \
                .replace("_neighbor_outage_overflow", " (neighbour outage)") \
@@ -71,14 +94,21 @@ def main():
                     help="bag-of-words instead of dense embeddings (no key needed)")
     args = ap.parse_args()
 
+    # rag_pipeline.retrieve() uses Gemini whenever a key is set and word counts
+    # otherwise. --offline hides the key for this run, so retrieval falls back to
+    # word counts even if you have one.
     if args.offline:
         os.environ.pop("GEMINI_API_KEY", None)
     elif not os.environ.get("GEMINI_API_KEY"):
         sys.exit("[error] GEMINI_API_KEY is not set. Use --offline to run bag-of-words,\n"
-                 "        but read the note at the bottom before you trust the result.")
+                 "        but read the note it prints before you trust the result.")
 
     engine = "offline bag-of-words" if args.offline else "Gemini dense embeddings"
+    # Live data for the cell: KPI readings (with which thresholds were crossed) and
+    # the active alarms on its site. Rungs 2 and 3 build their search text from these.
     kpis, alarms = get_cell_kpis(CELL), get_active_alarms(SITE)
+    # Steps 1 and 2 happen once: cut the knowledge base into its 24 chunks.
+    # (The chunks are embedded the first time retrieve() runs, then reused.)
     chunks = R.load_and_chunk_knowledge_base()
 
     print(f"\n{BOLD}QUERY CONSTRUCTION — three rungs, one knowledge base{OFF}")
@@ -91,8 +121,16 @@ def main():
 
     results = []
     for style, what, aside in RUNGS:
+        # Step 3: build the search text for this rung.
         q = R.build_retrieval_query(QUESTION, kpis, alarms, CELL, SITE, style=style)
+        # Step 4: score all 24 chunks against it and keep the top 3. per_source=False
+        # shows raw chunks, so one incident can take several slots -- which is how
+        # you see a winner dominate (offline, rung 1 gives incident_001 slots 1 and 2).
         ranked = R.retrieve(q, chunks, k=3, per_source=False)
+        # PASS if the congestion postmortem is ranked first. Measured with Gemini,
+        # rung 1 put incident_003 (VoLTE) first by 0.001; rungs 2 and 3 put
+        # incident_001 first. Step 5 (the LLM) never runs here: this lab is only
+        # about which document the search finds.
         top = ranked[0]["source"] if ranked else ""
         ok = WANT in top
         results.append((style, ok))
@@ -106,6 +144,8 @@ def main():
         print()
 
     print(BOLD + "=" * 72 + OFF)
+    # Three possible endings: the failure this lab is about (rung 1 wrong, rung 3
+    # right), no failure because we ran offline, or no failure with Gemini today.
     if results[0][1] is False and results[-1][1] is True:
         print(f"""
   Rung 1 put the wrong document first. Nothing about the retriever changed
