@@ -19,6 +19,25 @@ Here is TCK-4471, the ticket this module follows (eval case EVAL-03):
 It is a congestion question. The knowledge base has a congestion postmortem in
 it. Watch which document comes back first.
 
+WHERE THE QUESTION COMES FROM
+-----------------------------
+Three things start a run like this, and they arrive with different material:
+
+  an alarm or KPI breach fires   no written text, all the telemetry  -> rung 2
+  a ticket arrives               fields, plus how it was reported     -> rung 3
+  an engineer asks something     written text, maybe no telemetry     -> rung 1
+
+So rung 1 is not only the mistake this lab is about. It is also the right answer
+when there is nothing measured to search with: "what is our SOP for backhaul
+jitter?" has no alarms and no crossed thresholds, and build_retrieval_query
+falls back to the question for exactly that reason.
+
+One step this lab skips: a typed question does not arrive with IDs. The ticket
+gave us SITE-031; "why does this cell keep congesting?" would not, so a real
+system has to resolve the cell and site from the text before it can build a
+measured query at all. draft_grounded_rca sidesteps that by taking cell_id as
+an argument.
+
 FAIL -> FIX -> PASS
 -------------------
 The lab runs the same search three ways. Think of them as rungs on a ladder:
@@ -78,7 +97,7 @@ WANT = "incident_001_local_event_congestion.md"
 # (style passed to build_retrieval_query, what it does, a short aside for the printout)
 RUNGS = [
     ("question", "embed the ticket, whole", "what most RAG code does"),
-    ("measured", "embed the alarms + crossed KPI thresholds", "no prose at all"),
+    ("measured", "embed the alarms + crossed KPI thresholds", "no ticket wording at all"),
     ("measured+question", "measured facts first, ticket after", "the pipeline's default"),
 ]
 
@@ -124,7 +143,7 @@ def main():
               f"  the rung 1 failure. Expect all three rungs to pass. Run with a key to see\n"
               f"  the real thing.{OFF}\n")
     else:
-        print(f"{DIM}  Embedding the 24 chunks once, then one call per rung: 27 calls, well\n"
+        print(f"{DIM}  Embedding the 24 chunks once, then one call per rung: 28 calls, well\n"
               f"  under a minute. Scores are cosine similarity, 0 to 1.{OFF}\n")
 
     results = []
@@ -199,6 +218,11 @@ def main():
   Write down what you actually saw. A retrieval result is a measurement with a
   date on it, not a property of the code. Then read build_retrieval_query in
   rag_pipeline.py and decide whether the rule still holds for you.
+""")
+
+    print("""  The rungs are not only a ladder. An alarm-triggered run has no question at
+  all, which is rung 2; a question about a procedure has no telemetry to search
+  with, which is rung 1. Real systems hit all three.
 """)
 
     print(f"""  {BOLD}YOUR TURN{OFF}  (all edits are in this file)

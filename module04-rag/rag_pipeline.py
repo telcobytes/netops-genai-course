@@ -188,9 +188,10 @@ def embed_with_gemini_api(texts, task_type="RETRIEVAL_DOCUMENT"):
     return embed_texts(texts, task_type=task_type)
 
 
-# The knowledge base does not change between queries, and gemini-embedding-*
-# will not embed a batch — so embedding 24 chunks costs 24 calls. Do it once per
-# process and reuse, rather than re-embedding the whole corpus on every retrieve().
+# The knowledge base does not change between queries, and gemini-embedding-* will
+# not embed a batch: llm_client tries one batched call, is refused, and then embeds
+# one text per call — so the 24 chunks cost 25 calls (measured 17 Sep 2026). Do it
+# once per process and reuse, rather than re-embedding on every retrieve().
 _chunk_vector_cache = {}
 
 

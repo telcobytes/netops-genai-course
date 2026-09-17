@@ -19,6 +19,22 @@ Chunk → Embed chunks ──► vectors ◄────── Embed the query �
 1. **Structure-Aware Chunking:** Splits the `data/knowledge_base/*.md` incident postmortems and reference docs on blank lines, so each paragraph or section becomes a chunk. Every chunk starts with its document's title and affected site, so it can be matched on its own.
 2. **Dense Vector Embeddings:** Converts chunks into 768-dimensional semantic vectors through `llm_client.embed_texts()`. That function uses the first working model from `EMBEDDING_CANDIDATES` (`gemini-embedding-2` first). Override it with `COURSE_EMBEDDING_MODEL`. Chunks are embedded as `RETRIEVAL_DOCUMENT` and the query as `RETRIEVAL_QUERY`.
 3. **Query Construction:** `build_retrieval_query()` decides what gets embedded. By default (`style="measured+question"`) it uses the active alarm types, the KPI thresholds that were crossed, and the cell and site IDs first, then adds the question. Ticket wording like "a trouble ticket reports… no alarm cited" describes the report, not the fault, and it pulls up the wrong incident.
+### Where the question comes from
+
+Three things start a run, and they arrive with different material — which decides the query style:
+
+| Trigger | What you have | Style |
+|---|---|---|
+| An alarm or KPI breach fires | No written text at all, all the telemetry | `measured` |
+| A ticket arrives (tool or human) | Structured fields, plus a description of how it was reported | `measured+question` |
+| An engineer asks something | Written text, and maybe no telemetry at all | `question` |
+
+The last row is why `build_retrieval_query` falls back to the question when there are no alarms and no crossed thresholds: "what is our SOP for backhaul jitter?" has nothing measured to search with.
+
+A step this module skips: a typed question does not arrive with IDs. The ticket gave us SITE-031; "why does this cell keep congesting?" would not, so a real system resolves the cell and site from the text first. `draft_grounded_rca` sidesteps it by taking `cell_id` as an argument.
+
+---
+
 4. **Cosine Similarity Retrieval:** Ranks every chunk by cosine similarity to the query, then keeps the best chunk from each of the top `k=2` **documents**. Pass `per_source=False` to see the raw chunk ranking.
 5. **Augmented Drafting:** Puts live telemetry (`get_cell_kpis`, `get_active_alarms`) and the retrieved excerpts into a structured RCA prompt (Impact / Likely cause / Recommended action).
 
