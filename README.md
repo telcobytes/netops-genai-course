@@ -28,10 +28,10 @@ Follow these 3 simple steps to get started in under 2 minutes:
 
 #### Step 1: Clone & Setup Virtual Environment (One-time)
 ```bash
-git clone https://github.com/<YOUR-GITHUB-USERNAME>/telecom-agentic-ai-course.git
-cd telecom-agentic-ai-course
+git clone https://github.com/telcobytes/netops-genai-course.git
+cd netops-genai-course
 
-python3 -m venv venv
+python3 -m venv venv                  # Windows:  python -m venv venv
 source venv/bin/activate          # macOS / Linux
 # Windows CMD:         venv\Scripts\activate
 # Windows PowerShell:  .\venv\Scripts\Activate.ps1
