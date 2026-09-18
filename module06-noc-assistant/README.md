@@ -87,7 +87,7 @@ _dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline
 
 The wiring is ten lines. The question is whether the model **uses** it, and the only thing advertising it is the `description` — that one sentence is prompt surface. Watch three things: does it call the tool at all; does it read the *status* (SITE-022's only record is an RRU replacement **SCHEDULED** for 16 Sep, which has not happened); and does a clean result change the answer (SITE-031's last change added no capacity, so "nothing recent explains this" is itself evidence).
 
-`python solution_fifth_tool.py` is a worked version if you want to compare.
+`python solution_fifth_tool.py` shows the wiring and what the tool returns — offline, no key. Add `--live` to ask the agent for real (about 10 calls) and see whether it picks the tool up.
 
 **4. Rewrite a description and watch tool choice move.** Change `get_cell_kpis`'s description from *"Get a COMPUTED KPI summary… The tool does the arithmetic so you don't have to"* to *"Returns KPI data for a cell."* and run twice. Does it still call it first? Does it start passing `window_minutes`? Does it try to do the arithmetic itself? Runs vary, so run each version twice before concluding anything — the point is that you cannot stop a model choosing badly, but you can make the right choice the obvious one.
 
