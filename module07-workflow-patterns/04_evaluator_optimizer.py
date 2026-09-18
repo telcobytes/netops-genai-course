@@ -44,6 +44,16 @@ DIAGNOSTIC_LAYERS = [
     ("Core Services", "AMF/SMF/PCF — checked last, least likely and most expensive"),
 ]
 
+# The first draft is SEEDED, in both modes, and it is worth knowing why.
+#
+# Measured 18 Sep 2026: asked for this RCA cold, the live model went straight to
+# capacity exhaustion — the right answer — and the critic passed it on the first
+# attempt. A loop that never loops teaches nothing, so attempt 0 is a deliberately
+# weak draft: the mistake a tired engineer makes at 3am, blaming the most
+# expensive layer because RRC rejects are the loudest thing on the screen.
+#
+# Everything after that is real: the critic reads this draft, names what it
+# skipped, and a live model writes the revision.
 DRAFTS = [
     # Deliberately skips transport — the exact mistake the checklist catches.
     ("Impact: CELL-031A subscribers see degraded throughput and call setup failures.\n"
@@ -69,13 +79,19 @@ CRITIQUES = [
 
 def draft_rca(cell_id: str, attempt: int, feedback: str = "") -> str:
     kpis = get_cell_kpis(cell_id)
+    # The first draft is asked for three lines and nothing else. That is the point:
+    # it has no idea a reviewer exists, so it writes what anyone writes under
+    # pressure — the conclusion, without the ruling-out. The critic's feedback is
+    # what teaches it, which is the entire pattern. Telling the drafter up front
+    # what the reviewer wants makes the first draft pass and the loop never runs.
     prompt = f"""Draft an RCA for {cell_id} in three lines (Impact / Likely cause / Recommended action).
 
 KPI SUMMARY: {json.dumps(kpis['rolling_avg'])}
 THRESHOLDS CROSSED: {json.dumps(kpis['thresholds_crossed'])}
 ALARMS: {json.dumps(get_active_alarms('SITE-031'))}
 TOPOLOGY: {json.dumps(lookup_topology(cell_id))}
-{f'REVISE. A reviewer rejected your previous draft: {feedback}' if feedback else ''}"""
+{f"""REVISE. A reviewer rejected your previous draft: {feedback}
+In "Likely cause", name the cheaper layers you ruled out and why, before you name the cause.""" if feedback else ''}"""
     return ask(prompt, mock=DRAFTS[min(attempt, len(DRAFTS) - 1)])
 
 
@@ -85,13 +101,18 @@ def critique(rca: str, attempt: int) -> dict:
     checklist means it's checking a fact rather than offering an opinion."""
     layers = "\n".join(f"{i}. {name} — {hint}" for i, (name, hint) in enumerate(DIAGNOSTIC_LAYERS, 1))
     prompt = f"""You are reviewing an RCA against a fixed diagnostic order. Cheapest,
-most likely causes must be ruled out BEFORE more expensive ones are blamed.
+most likely causes must be ruled out BEFORE a more expensive one is blamed.
 
-DIAGNOSTIC ORDER:
+DIAGNOSTIC ORDER (cheapest first):
 {layers}
 
 RCA UNDER REVIEW:
 {rca}
+
+Decide which layer the RCA blames. Then list ONLY the layers CHEAPER than that one
+which it neither ruled out nor mentioned. Layers more expensive than the cause do
+not need discussing — an RCA that blames layer 1 owes you nothing about layer 4.
+If no cheaper layer was skipped, it passes.
 
 Respond ONLY as JSON: {{"passed": bool, "missing": [layer names skipped], "note": "one sentence"}}"""
     raw = ask(prompt, mock=json.dumps(CRITIQUES[min(attempt, len(CRITIQUES) - 1)]))
@@ -105,8 +126,11 @@ def run(cell_id: str = "CELL-031A") -> None:
     feedback, best = "", None
     for attempt in range(MAX_REVISIONS + 1):
         label = "Draft" if attempt == 0 else f"Revision {attempt}"
-        print(f"\n{CYAN}{BOLD}[{label}]{RESET}")
-        rca = draft_rca(cell_id, attempt, feedback)
+        print(f"\n{CYAN}{BOLD}[{label}]{RESET}" +
+              (f"  {YELLOW}(seeded — a live model rarely writes a draft this bad){RESET}"
+               if attempt == 0 else ""))
+        # Attempt 0 is the seeded weak draft; revisions are the real thing.
+        rca = DRAFTS[0] if attempt == 0 else draft_rca(cell_id, attempt, feedback)
         print("    " + rca.replace("\n", "\n    "))
 
         verdict = critique(rca, attempt)
@@ -128,7 +152,11 @@ def run(cell_id: str = "CELL-031A") -> None:
           "removes a caveat, the critic asks for it back, and you pay for both forever — the same "
           "failure as the unconstrained ReAct loop in Module 5. MAX_REVISIONS is the circuit breaker.")
     print(f"{BOLD}Why this critic works:{RESET} it holds a checklist the drafter never saw. "
-          "A critic with identical context mostly adds hedging.")
+          "Delete the checklist and the critique does not go soft — it goes GENERIC. Measured "
+          "18 Sep 2026 on this same draft: the checklist-less critic still rejected it, but for "
+          "a missing timeline, missing preventive measures and an 'unconfirmed' cause. Plausible, "
+          "professional, and not the diagnostic error. It would have sent the drafter off to add "
+          "a timeline while it still blamed the AMF.")
 
 
 if __name__ == "__main__":

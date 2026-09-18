@@ -13,7 +13,7 @@ and `checkpoints/`.
 | 4 · Grounding Agents — RAG | `module04-rag/` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/telcobytes/netops-genai-course/blob/main/module04-rag/04_rag.ipynb) · or `python module04-rag/rag_pipeline.py` |
 | 5 · From Prompts to Agents — the ReAct loop | `module05-react-loop/` | [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/telcobytes/netops-genai-course/blob/main/module05-react-loop/05_react_loop.ipynb) · or `python module05-react-loop/react_agent.py` |
 | 6 · Tool Calling & the approval gate | `module06-noc-assistant/` | `python module06-noc-assistant/noc_assistant.py` |
-| 7 · Workflow Patterns + the Triage Triad | `module07-workflow-patterns/` | `python module07-workflow-patterns/05_orchestrator_workers.py` |
+| 7 · Workflow Patterns + the Triage Triad | `module07-workflow-patterns/` | `python module07-workflow-patterns/05_orchestrator_workers.py --mock` (drop `--mock` for live) |
 | 8 · The Telecom RCA Skill | `module08-rca-skill/` | `python module08-rca-skill/run_skill.py CELL-031A` |
 | 9 · Model Context Protocol | `module09-mcp/` | `python module09-mcp/mcp_server.py`, then `mcp_client.py` |
 | 10 · Evaluation, tracing & guardrails | `module10-eval/` | `python module10-eval/run_eval.py` |
