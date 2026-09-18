@@ -119,6 +119,37 @@ TOOL_SCHEMAS = [
 ]
 
 
+# What a tool result is allowed to carry back into the conversation.
+#
+# get_cell_kpis also returns `readings`, the five raw 15-minute rows the summary
+# was computed from: 1,274 of its 2,236 characters, and nothing has ever cited
+# them. Every turn re-sends the whole conversation, so one fat result is paid for
+# again on every later turn.
+#
+# Measured on the nine tool calls this lab's own question produced (17 Sep 2026):
+# 8,171 characters of tool results become 4,182, and the run sends 21,388
+# characters instead of 34,681 — 38% less, for one dropped field.
+KPI_FIELDS = ("cell_id", "window_start", "window_end", "latest", "rolling_avg",
+              "delta", "thresholds_crossed")
+
+
+def _for_context(name: str, result):
+    """Trim a tool result to what the model reasons over, before it goes back."""
+    if name == "get_cell_kpis" and isinstance(result, dict):
+        return {k: v for k, v in result.items() if k in KPI_FIELDS}
+    return result
+
+
+# Three ways a proposed ticket can fail to become one, and they are not the same
+# event. The model reads these statuses, and so does a person auditing the run:
+#
+#   refused_by_schema     the arguments are not a valid ticket      (code, no human)
+#   refused_by_guardrail  valid, but out of scope or over-severity  (code, no human)
+#   declined_by_human     valid and in policy — a person said no    (human)
+#
+# Only the third is a judgement call. The first two are things code can prove,
+# which is why they never reach a person.
+
 def _dispatch_tool(name: str, args: dict):
     if name == "create_ticket":
         # Guardrails run BEFORE the human is asked. A person should never be shown a
@@ -175,6 +206,10 @@ def _dispatch_tool(name: str, args: dict):
                         "Do not propose it again; summarise your findings instead.",
             }
         try:
+            # Not idempotent: propose the same ticket twice and you get two
+            # tickets. Fine against a mock, not fine against a real ITSM system —
+            # production passes a dedupe key derived from the site and the
+            # condition, so a retry updates the existing ticket instead.
             return create_ticket(**args)
         except Exception as err:
             return {"error": f"Error creating ticket: {err}"}
@@ -201,6 +236,9 @@ def run_noc_assistant(question: str, max_turns: int = 10, scope=None) -> str:
 
 
 def _run(question: str, max_turns: int) -> str:
+    """max_turns bounds the conversation the way Module 5's max_steps bounded the
+    loop: the model decides what to do next, so something other than the model has
+    to decide when to stop."""
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": question},
@@ -229,7 +267,8 @@ def _run(question: str, max_turns: int) -> str:
             messages.append({
                 "role": "tool",
                 "tool_call_id": tool_call.id,
-                "content": json.dumps(result, default=str),
+                "content": json.dumps(_for_context(tool_call.function.name, result),
+                                      default=str),
             })
 
     return "Reached max turns without a final answer."

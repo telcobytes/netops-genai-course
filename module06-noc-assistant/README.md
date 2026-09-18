@@ -62,6 +62,38 @@ AUTO_APPROVE=1 python noc_assistant.py
 
 ---
 
+## Try This
+
+Three exercises. The first two need no API key — they call the dispatcher directly, which is where every safety decision is made.
+
+**1. Watch a refusal that never reaches a person.** Two kinds, for two different reasons:
+
+```python
+import sys; sys.path += ["../data", "."]
+from noc_assistant import _dispatch_tool
+
+# not a valid ticket at all — the schema refuses it
+_dispatch_tool("create_ticket", {"summary": "PRB saturation at SITE-031",
+                                 "site_id": "SITE-031", "severity": "URGENT"})
+
+# a valid ticket that overreaches — SITE-022's worst active alarm is MINOR
+_dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline",
+                                 "site_id": "SITE-022", "severity": "CRITICAL"})
+```
+
+**2. Say no at the gate.** Run `python noc_assistant.py` and answer `n`. The model is told `declined_by_human` and asked to summarise instead of re-proposing — a decline is a recorded decision, not a silence. Then run it again with `AUTO_APPROVE=1` and notice you never see the prompt at all. That is the escape hatch doing its job, and the reason it should stay visible.
+
+**3. Add the fifth tool, and make the schema do the work.** `guardrails.py` already models `set_tx_power` with a bound of 10–46 dBm. Add it to `TOOL_SCHEMAS`, dispatch it through `validate_tool_args` the way `create_ticket` is, and ask the agent to raise power on CELL-031A. A proposal of 95 dBm is refused in microseconds by the bound, with a message the model can act on — no prompt, no human, no argument. That is the same lesson as the severity enum, on a tool where being wrong costs real money.
+
+---
+
+## Two Things This Lab Does Not Do
+
+* **Idempotency.** Propose the same ticket twice and you get two tickets. Against a mock that is harmless; against a real ITSM system it is a duplicate on someone's queue. Production passes a dedupe key derived from the site and the condition, so a retry updates the existing ticket instead of opening another.
+* **Unbounded conversation.** `max_turns=10` bounds the loop the way Module 5's `max_steps` bounded its own: the model chooses what to do next, so something other than the model has to choose when to stop.
+
+---
+
 ## Key Files
 * `noc_assistant.py`: Complete implementation with `TOOL_SCHEMAS`, dispatch handler, and multi-turn tool-calling loop.
 * `../data/llm_client.py`: Implements `call_llm_tools()` which converts OpenAI-style tool declarations to Gemini API function declarations and parses candidate tool calls.
