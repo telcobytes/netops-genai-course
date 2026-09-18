@@ -258,8 +258,17 @@ def _run(question: str, max_turns: int) -> str:
                 continue
             return message.content
 
-        # Record the assistant's tool-call request, then execute each one
+        # Record the assistant's tool-call request, then execute each one.
+        #
+        # message.tool_calls is a LIST: a model may ask for several tools in one
+        # turn, and independent reads are exactly when it should. We execute them
+        # in order here, which is the safe default — writes must not be reordered
+        # or run concurrently, and a dispatcher that parallelises reads has to know
+        # which is which. Module 6's split (three reads, one write) is what makes
+        # that decidable.
         messages.append(message)
+        if len(message.tool_calls) > 1:
+            print(f"\n[{len(message.tool_calls)} tool calls in one turn]")
         for tool_call in message.tool_calls:
             args = json.loads(tool_call.function.arguments)
             print(f"\n[tool call] {tool_call.function.name}({args})")

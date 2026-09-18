@@ -1,0 +1,5 @@
+change_id,site_id,cell_id,performed_at,status,type,description,performed_by
+CHG-2028,SITE-031,,2026-08-20T02:00:00Z,COMPLETED,Software upgrade,RAN software upgraded to the 23.Q3 baseline; post-change checks passed,VendorA field team
+CHG-2033,SITE-014,,2026-09-09T01:30:00Z,COMPLETED,Transmission,Backhaul link firmware upgrade; the link flapped twice during cutover and self-recovered,Transport team
+CHG-2041,SITE-031,CELL-031A,2026-09-03T03:15:00Z,COMPLETED,Parameter change,Carrier aggregation parameters retuned for evening traffic; no capacity added,RF planning
+CHG-2052,SITE-022,CELL-022A,2026-09-16T22:00:00Z,SCHEDULED,Hardware,Planned RRU replacement raised from TCK-4380; 90-minute outage window,Field ops

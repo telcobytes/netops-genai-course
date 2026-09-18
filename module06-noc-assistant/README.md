@@ -83,7 +83,13 @@ _dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline
 
 **2. Say no at the gate.** Run `python noc_assistant.py` and answer `n`. The model is told `declined_by_human` and asked to summarise instead of re-proposing — a decline is a recorded decision, not a silence. Then run it again with `AUTO_APPROVE=1` and notice you never see the prompt at all. That is the escape hatch doing its job, and the reason it should stay visible.
 
-**3. Add the fifth tool, and make the schema do the work.** `guardrails.py` already models `set_tx_power` with a bound of 10–46 dBm. Add it to `TOOL_SCHEMAS`, dispatch it through `validate_tool_args` the way `create_ticket` is, and ask the agent to raise power on CELL-031A. A proposal of 95 dBm is refused in microseconds by the bound, with a message the model can act on — no prompt, no human, no argument. That is the same lesson as the severity enum, on a tool where being wrong costs real money.
+**3. Add a fifth tool, and see whether the model reaches for it.** `get_recent_changes(site_id)` returns change and maintenance records — what a NOC correlates against first: before blaming a cell, ask whether anybody touched it. Add it to `TOOL_SCHEMAS`, dispatch it (read-only, so no gate), and ask about SITE-031 without mentioning changes.
+
+The wiring is ten lines. The question is whether the model **uses** it, and the only thing advertising it is the `description` — that one sentence is prompt surface. Watch three things: does it call the tool at all; does it read the *status* (SITE-022's only record is an RRU replacement **SCHEDULED** for 16 Sep, which has not happened); and does a clean result change the answer (SITE-031's last change added no capacity, so "nothing recent explains this" is itself evidence).
+
+`python solution_fifth_tool.py` is a worked version if you want to compare.
+
+**4. Rewrite a description and watch tool choice move.** Change `get_cell_kpis`'s description from *"Get a COMPUTED KPI summary… The tool does the arithmetic so you don't have to"* to *"Returns KPI data for a cell."* and run twice. Does it still call it first? Does it start passing `window_minutes`? Does it try to do the arithmetic itself? Runs vary, so run each version twice before concluding anything — the point is that you cannot stop a model choosing badly, but you can make the right choice the obvious one.
 
 ---
 
@@ -91,6 +97,18 @@ _dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline
 
 * **Idempotency.** Propose the same ticket twice and you get two tickets. Against a mock that is harmless; against a real ITSM system it is a duplicate on someone's queue. Production passes a dedupe key derived from the site and the condition, so a retry updates the existing ticket instead of opening another.
 * **Unbounded conversation.** `max_turns=10` bounds the loop the way Module 5's `max_steps` bounded its own: the model chooses what to do next, so something other than the model has to choose when to stop.
+
+### What a production wiring adds
+
+Named here rather than built, because each would add machinery that hides the lesson:
+
+| Concern | What you add |
+|---|---|
+| Transient failures | Retry with backoff on 429 and 5xx, and a cap so a retry storm cannot become the outage |
+| A tool that hangs | A per-call timeout, returned to the model as an observation rather than raised |
+| Duplicate writes | An idempotency key derived from the condition, so a retry updates rather than duplicates |
+| Cost and latency | A per-call log of tokens, duration and outcome — Module 10 turns this into tracing |
+| Several calls at once | `message.tool_calls` is a list. Independent reads can run in parallel; writes must not be reordered, which is why the read/write split is worth keeping strict |
 
 ---
 

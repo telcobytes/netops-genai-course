@@ -183,6 +183,27 @@ def lookup_topology(node_id: str) -> Optional[dict]:
         f"unknown node_id {node_id!r} — known nodes: {', '.join(sorted(known))}")
 
 
+def get_recent_changes(site_id: str) -> list[dict]:
+    """Return change and maintenance records for a site, newest first.
+
+    Mirrors a change-management / MoP system, which is the first thing a NOC
+    correlates against: before you blame a cell, ask whether anybody touched it.
+
+    Records carry a status, and the distinction matters: COMPLETED happened,
+    SCHEDULED has not. An agent that reads "RRU replacement" without reading
+    "SCHEDULED, 2026-09-16" will explain today's incident with next week's work.
+    """
+    rows = _load_csv("changes.csv")
+    known = {r["site_id"] for r in rows} | {s["site_id"] for s in _load_json("topology.json")["sites"]}
+    if site_id not in known:
+        # Same rule as the other tools: an unknown id is an error, not an empty
+        # list. "No changes" and "no such site" are different answers.
+        raise ValueError(
+            f"unknown site_id {site_id!r} — known sites: {', '.join(sorted(known))}")
+    matches = [r for r in rows if r["site_id"] == site_id]
+    return sorted(matches, key=lambda r: r["performed_at"], reverse=True)
+
+
 VALID_SEVERITIES = ("MINOR", "MAJOR", "CRITICAL")
 
 
@@ -268,7 +289,7 @@ def adjust_antenna_tilt(cell_id: str, tilt_degrees: float) -> dict:
 
 
 if __name__ == "__main__":
-    # Quick smoke test / demo of all four tools against the sample data.
+    # Quick smoke test / demo of the read tools and a ticket, against the sample data.
     # Runs on the standard library alone — no API key, no pip install.
     print("Computed KPI summary for CELL-031A (last 60 min):")
     summary = get_cell_kpis("CELL-031A")
@@ -284,6 +305,10 @@ if __name__ == "__main__":
 
     print("\nTopology for CELL-031A:")
     print(" ", lookup_topology("CELL-031A"))
+
+    print("\nRecent changes at SITE-031:")
+    for row in get_recent_changes("SITE-031"):
+        print(" ", row["change_id"], row["status"], row["performed_at"][:10], row["type"])
 
     print("\nSample ticket creation:")
     print(" ", create_ticket("Congestion at CELL-031A", site_id="SITE-031",
