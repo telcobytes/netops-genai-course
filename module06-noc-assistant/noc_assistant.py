@@ -124,6 +124,28 @@ def _dispatch_tool(name: str, args: dict):
         # Guardrails run BEFORE the human is asked. A person should never be shown a
         # proposal that code can already prove is out of bounds — that is how an
         # approval gate degrades into a rubber stamp.
+        #
+        # Two checks, in this order, and the order is the lesson:
+        #
+        #   1. The SCHEMA: is this even a well-formed ticket? The enum lives in
+        #      CreateTicketArgs, so severity="URGENT" and a nine-character summary
+        #      are rejected here, in microseconds, with a message the model can
+        #      read and correct itself from. Asking the human first would be asking
+        #      them to approve something that cannot be filed.
+        #   2. The POLICY: is it in scope, and does the alarm feed support this
+        #      severity? A ticket can be perfectly well-formed and still overreach.
+        try:
+            args = guardrails.validate_tool_args("create_ticket", args)
+        except guardrails.GuardrailError as err:
+            print(f"\n  >>> SCHEMA REFUSED: {err}")
+            return {
+                "status": "refused_by_schema",
+                "reason": str(err),
+                "note": "Rejected by the argument schema before any human saw it. "
+                        "Re-propose with a valid severity and a summary of at least "
+                        "10 characters.",
+            }
+
         allowed, reason = guardrails.check_ticket_proposal(args)
         if not allowed:
             print(f"\n  >>> GUARDRAIL REFUSED: {reason}")

@@ -155,6 +155,15 @@ def check_ticket_proposal(args: dict, scope=None) -> tuple:
     site = str(args.get("site_id") or "").strip()
     asked = str(args.get("severity") or "MINOR").upper()
 
+    # An unrecognised severity used to rank as 0, which is below every ceiling, so
+    # severity="URGENT" sailed through the check meant to catch overreach. Callers
+    # that validate args first (noc_assistant does) never get here with a bad
+    # value; solution_scope_guard calls this directly, so refuse it here too.
+    if asked not in SEVERITY_RANK:
+        return False, (
+            f"severity {asked!r} is not one of {', '.join(SEVERITY_RANK)} — "
+            "an unrecognised value cannot be compared with the alarm feed.")
+
     scope = investigation_scope() if scope is None else ({s for s in scope} if scope else None)
     if scope and site not in scope:
         return False, (
