@@ -157,8 +157,10 @@ def live_demo():
     print("""
 --- Did it reach for the new tool? Scroll up for [tool call] get_recent_changes.
 
-If it did NOT, delete the second sentence of the description and run again. The
-tool has not changed. What the model knew about it has.""")
+If it did not, run it again before concluding anything: agent runs vary, and this
+tool was called at position three in four measured runs. And do not reach for the
+description as the fix — rewording it changed nothing in those runs. The name and
+the system prompt are what put a tool in play.""")
 
 
 if __name__ == "__main__":
