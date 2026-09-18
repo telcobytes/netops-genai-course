@@ -81,6 +81,16 @@ _dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline
                                  "site_id": "SITE-022", "severity": "CRITICAL"})
 ```
 
+**2a. What the model does before the guardrail can.** Measured the same day: asked point-blank to *"open a CRITICAL ticket for SITE-022"*, and again under invented management pressure, the agent investigated, found the VoLTE alarm within tolerance, and proposed **MINOR** anyway — telling the user CRITICAL was not supported by the evidence. The severity ceiling never fired, because it did not have to.
+
+That is the honest shape of the argument on the failure-lab slide: the prompt works most of the time, and "most of the time" is not a safety limit. The guardrail is what turns usually into always. For proof that it does fire on a real run, look at Module 10's EVAL-02, where a live agent proposed a ticket against a *different site* than the one it was investigating and the scope rule refused it:
+
+```
+>>> GUARDRAIL REFUSED: out of scope — this investigation covers SITE-022,
+    but the proposed ticket names SITE-031. Reading a neighbour's KPIs does
+    not authorise filing against it.
+```
+
 **2. Say no at the gate.** Run `python noc_assistant.py` and answer `n`. The model is told `declined_by_human` and asked to summarise instead of re-proposing — a decline is a recorded decision, not a silence. Then run it again with `AUTO_APPROVE=1` and notice you never see the prompt at all. That is the escape hatch doing its job, and the reason it should stay visible.
 
 **3. Add a fifth tool, and see whether the model reaches for it.** `get_recent_changes(site_id)` returns change and maintenance records — what a NOC correlates against first: before blaming a cell, ask whether anybody touched it. Add it to `TOOL_SCHEMAS`, dispatch it (read-only, so no gate), and ask about SITE-031 without mentioning changes.
@@ -89,7 +99,17 @@ The wiring is ten lines. The question is whether the model **uses** it, and the 
 
 `python solution_fifth_tool.py` shows the wiring and what the tool returns — offline, no key. Add `--live` to ask the agent for real (about 10 calls) and see whether it picks the tool up.
 
-**4. Rewrite a description and watch tool choice move.** Change `get_cell_kpis`'s description from *"Get a COMPUTED KPI summary… The tool does the arithmetic so you don't have to"* to *"Returns KPI data for a cell."* and run twice. Does it still call it first? Does it start passing `window_minutes`? Does it try to do the arithmetic itself? Runs vary, so run each version twice before concluding anything — the point is that you cannot stop a model choosing badly, but you can make the right choice the obvious one.
+**4. Try to make the description matter — and see what actually decides.** The intuition is that rewriting a tool's `description` changes whether the model picks it. Measured on this lab (18 Sep 2026, `gemini-3.6-flash`, two runs per variant), it did not:
+
+| What changed | Result |
+|---|---|
+| `get_cell_kpis`: full description vs *"Returns KPI data for a cell."* | No difference. Called third in every run, never passed `window_minutes`. |
+| `get_recent_changes`: full description vs *"Returns change records for a site."* | No difference. Called third in all four runs. |
+| Both stripped: renamed `query_records`, description *"Returns records."* | Still called — but once at position **9** instead of 3. |
+
+So on a small, well-named toolset the **name** and the **system prompt** carry the decision, and the description has little left to do. That is worth knowing before you spend an afternoon tuning descriptions.
+
+Your exercise: find a case where the description *does* decide. The obvious one is ambiguity — add a second tool whose name does not disambiguate it from an existing one (say `get_cell_health` alongside `get_cell_kpis`) so the only signal is what each description claims. Run each variant twice, count which tool gets called and in what position, and write down what you saw rather than what you expected.
 
 ---
 

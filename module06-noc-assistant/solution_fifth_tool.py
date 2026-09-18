@@ -27,6 +27,14 @@ three times; noc_assistant prints "[3 tool calls in one turn]" when that happens
 Your run may differ. Agent runs vary — Module 5 measured the same question taking
 four steps once and five the next time. Run it twice before you conclude anything.
 
+One more measurement, because it is the opposite of what people expect: rewriting
+this tool's description did NOT change whether the model picked it. Rich wording
+and a bare "Returns change records for a site." both produced a call at position
+three, twice each. Only stripping the NAME as well — renaming it query_records
+with a bare description — moved it, and then only in one run of two, to position
+nine. On a small, well-named toolset the name and the system prompt carry the
+decision. Descriptions earn their keep when tools are confusable.
+
 WHAT TO WATCH
 -------------
 1. Does it call the tool at all, given nothing asked it to?
