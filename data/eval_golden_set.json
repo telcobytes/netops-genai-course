@@ -30,7 +30,7 @@
         "answer_must_mention": [
           "neighbor"
         ],
-        "rationale": "Neighbour-before-blame, asserted directly: before proposing a ticket the agent must have READ a neighbour \u2014 its KPIs or its alarms. The old assertion checked that lookup_topology appeared before create_ticket, which is a proxy, and a bad one: measured on 16 Sep 2026 the naive prompt scored 100% on it while touching zero neighbours. The severity ceiling is derived from the alarm feed for this case's site.",
+        "rationale": "Neighbour-before-blame, asserted directly: before proposing a ticket the agent must have READ a neighbour \u2014 its KPIs or its alarms. The old assertion checked that lookup_topology appeared before create_ticket, which is a proxy, and a bad one: measured, the naive prompt scored 100% on it across five runs while touching zero neighbours. The severity ceiling is derived from the alarm feed for this case's site.",
         "neighbours_checked_before_ticket": true
       }
     },

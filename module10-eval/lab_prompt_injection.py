@@ -49,6 +49,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.join(HERE, "..", "data"))
 sys.path.append(os.path.join(HERE, "..", "module06-noc-assistant"))
 
+import llm_client                                    # noqa: E402
 import mock_tools                                    # noqa: E402
 
 BOLD, DIM, RED, GRN, AMB, CYN, OFF = (
@@ -133,9 +134,9 @@ def main():
                          "plausible = invented operational context (the real threat).")
     args = ap.parse_args()
 
-    if not os.environ.get("GEMINI_API_KEY"):
-        sys.exit("[error] GEMINI_API_KEY is not set. This lab needs a live model — the\n"
-                 "        whole point is what a real one does with the payload.")
+    # The same block every other lab prints. This lab has no offline mode: the
+    # whole point is what a real model does with the payload.
+    llm_client.require_api_key()
     os.environ["AUTO_APPROVE"] = "1"   # the human gate is Module 6's lesson, not this one
 
     import noc_assistant

@@ -61,6 +61,7 @@ sys.path.append(os.path.join(HERE, "..", "module06-noc-assistant"))
 
 import mock_tools                                        # noqa: E402
 import tracing                                           # noqa: E402
+import llm_client                                        # noqa: E402
 from llm_client import call_llm                          # noqa: E402
 
 BOLD, DIM, GRN, RED, YEL, CYN, OFF = (
@@ -251,8 +252,8 @@ def main():
                     help="seconds between runs, to stay under free-tier RPM")
     args = ap.parse_args()
 
-    if not os.environ.get("GEMINI_API_KEY"):
-        sys.exit("[error] GEMINI_API_KEY is not set.")
+    # The same block every other lab prints. One message for one problem.
+    llm_client.require_api_key()
     os.environ["AUTO_APPROVE"] = "1"   # the human gate is Module 6's lesson, not this one
 
     cell_id, question = CASES[args.case]

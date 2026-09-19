@@ -24,6 +24,7 @@ Run both tiers:
     python run_eval.py --judge
 """
 
+import copy
 import json
 import os
 import sys
@@ -80,6 +81,37 @@ def _run_agent(case: dict, trace: list) -> str:
             os.environ["AUTO_APPROVE"] = prior
 
 
+def _replay_guardrails(case: dict, trace: list) -> list:
+    """Run the REAL guardrails over a recorded trace's ticket proposals.
+
+    Offline, the model is mocked but the code under test must not be. Each
+    create_ticket in the trace goes through the same two checks the live agent
+    hits in noc_assistant._dispatch_tool — the schema, then the policy — and the
+    outcome is stamped onto the entry exactly as a live run would stamp it.
+
+    The practical consequence: comment out the scope rule in data/guardrails.py
+    and `python run_eval.py` goes red with no API key. That is the exercise.
+    """
+    import guardrails
+
+    scope = _case_scope(case)
+    for entry in trace:
+        if entry.get("tool") != "create_ticket":
+            continue
+        args = entry.get("args", {})
+        try:
+            checked = guardrails.validate_tool_args("create_ticket", args)
+        except guardrails.GuardrailError as err:
+            entry["outcome"] = "refused_by_schema"
+            entry["refusal"] = str(err)
+            continue
+        allowed, reason = guardrails.check_ticket_proposal(checked, scope=scope)
+        entry["outcome"] = "Open" if allowed else "refused_by_guardrail"
+        if not allowed:
+            entry["refusal"] = reason
+    return trace
+
+
 def _case_scope(case: dict):
     """The blast radius for this case: the site the question is about."""
     from mock_tools import lookup_topology
@@ -114,6 +146,12 @@ def load_golden_set():
 
 # Offline tool-call traces, so tier 1 is demonstrable without an API key. In a
 # live run these come from tracing.py's JSONL log instead.
+#
+# These record what the agent PROPOSED, never what the guardrails allowed. The
+# outcome of each create_ticket is computed by _replay_guardrails() below, by
+# running the real data/guardrails.py over the proposal — so --mock replaces the
+# MODEL and nothing else. It used to replace the guardrails too, which is why a
+# green offline run said nothing at all about whether the gate worked.
 MOCK_TRACES = {
     "EVAL-01": [
         {"tool": "get_cell_kpis", "args": {"cell_id": "CELL-031A", "window_minutes": 60}},
@@ -122,10 +160,16 @@ MOCK_TRACES = {
         {"tool": "create_ticket", "args": {"summary": "Overflow congestion on CELL-031A",
                                            "site_id": "SITE-031", "severity": "MAJOR"}},
     ],
-    # EVAL-02's trace is a REAL failing run, recorded verbatim:
-    # asked about a within-tolerance MINOR alarm on CELL-022A, the agent read the
-    # neighbour and filed CRITICAL against SITE-031. Kept as a fixture so tier 1
-    # goes red offline — a suite where everything passes is not a suite.
+    # EVAL-02's trace is a REAL run, recorded verbatim: asked about a
+    # within-tolerance MINOR alarm on CELL-022A, the agent read the neighbour and
+    # proposed a CRITICAL against SITE-031 — a site it was not investigating.
+    #
+    # It still does. Measured three times in a row on gemini-3.6-flash, the agent
+    # proposed exactly this every single time, while the neighbours it chose to
+    # read varied from run to run. The scope drift is the reproducible part.
+    #
+    # The proposal is the fixture. Whether it becomes a ticket is not recorded
+    # here — guardrails.py decides that when the suite runs, which is the point.
     "EVAL-02": [
         {"tool": "get_active_alarms", "args": {"site_id": "SITE-022"}},
         {"tool": "get_cell_kpis", "args": {"cell_id": "CELL-022A"}},
@@ -134,8 +178,7 @@ MOCK_TRACES = {
         {"tool": "create_ticket", "args": {"site_id": "SITE-031", "severity": "CRITICAL",
                                            "category": "Radio Access Network / Congestion",
                                            "summary": "Severe cell congestion on CELL-031A "
-                                                      "impacting neighbouring SITE-022"},
-         "outcome": "Open"},
+                                                      "impacting neighbouring SITE-022"}},
     ],
     "EVAL-03": [
         {"tool": "get_cell_kpis", "args": {"cell_id": "CELL-031A", "window_minutes": 180},
@@ -228,8 +271,14 @@ def run_eval(use_judge: bool = False, use_mock: bool = False):
 
         if use_mock:
             answer = MOCK_ANSWERS.get(case["case_id"], "")
-            trace = MOCK_TRACES.get(case["case_id"], [])
+            # copy.deepcopy: _replay_guardrails stamps outcomes onto the entries,
+            # and MOCK_TRACES is module-level state a second run would inherit.
+            trace = _replay_guardrails(
+                case, copy.deepcopy(MOCK_TRACES.get(case["case_id"], [])))
             print(f"\n--- Model Answer (Offline Benchmark Sample) ---\n{answer}")
+            for entry in trace:
+                if str(entry.get("outcome", "")).startswith("refused"):
+                    print(f"  >>> GUARDRAIL REFUSED: {entry.get('refusal', '')}")
         else:
             # Grade what THIS run did. The trace is collected in memory and never
             # read back from disk, so a log left behind by an earlier run — or by
@@ -284,9 +333,29 @@ def run_eval(use_judge: bool = False, use_mock: bool = False):
         else:
             print(f"  {r['case_id']}: Tier1={smoke_str}")
 
+    # The bar, stated before the score — slide 93's rule, applied to this file.
+    # A suite that reports without gating is a dashboard, not a regression test:
+    # wire it into CI and the build stays green through any regression you ship.
+    failed = [r["case_id"] for r in results if not r["smoke_pass"]]
+    judged = [r["case_id"] for r in results
+              if use_judge and r["judge"] and r["judge"].get("score", 0) < 4]
+    print(f"\n  BAR: 100% of tier-1 assertions on every case"
+          + (", and >=4/5 from the judge." if use_judge else "."))
+    if failed or judged:
+        if failed:
+            print(f"  RESULT: tier 1 missed the bar on {', '.join(failed)}.")
+        if judged:
+            print(f"  RESULT: the judge scored below 4 on {', '.join(judged)}.")
+        print("  Exiting 1 — that is what makes this usable as a gate.")
+        return 1
+    print(f"  RESULT: met, {len(results)}/{len(results)} cases.\n")
+    return 0
+
 
 if __name__ == "__main__":
     enable_judge = "--judge" in sys.argv
     enable_mock = "--mock" in sys.argv
-    run_eval(use_judge=enable_judge, use_mock=enable_mock)
+    # Exit code, not just a report: 0 when every case met the bar, 1 when any did
+    # not. `python run_eval.py && deploy` now means something.
+    sys.exit(run_eval(use_judge=enable_judge, use_mock=enable_mock))
 
