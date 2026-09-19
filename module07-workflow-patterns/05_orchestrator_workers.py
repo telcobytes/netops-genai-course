@@ -82,6 +82,12 @@ Users {users} vs planned capacity {planned}. Neighbour degraded? {json.dumps(nei
         mock=(f"Cell is saturating under its own load: {users:.0f} active users against a planned "
               f"capacity of {planned}, with PRB at 96.3% and all three thresholds crossed; "
               "neighbours are healthy so this is not overflow. Confidence: high."))
+    # Read this line carefully, because it is the one students misattribute. The
+    # model wrote `finding`. The CONFIDENCE is ours — a constant — so the two desks
+    # disagree on every run and the synthesis step always has something to reconcile.
+    # In production this comes from the desk's own evidence (how many thresholds, how
+    # sustained, how recent), and getting that right is harder than the orchestration
+    # around it. Flip it to "low" and watch the supervisor's reasoning change.
     return {"desk": "RAN", "finding": finding, "confidence": "high",
             "evidence": f"{users:.0f}/{planned} users, PRB 96.3%, neighbours healthy"}
 

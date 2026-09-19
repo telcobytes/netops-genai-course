@@ -28,7 +28,7 @@ import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from _common import ask, banner, step, CYAN, GREEN, BOLD, RESET
+from _common import offline, ask, banner, step, CYAN, GREEN, BOLD, RESET
 
 sys.path.append("../data")
 from mock_tools import get_active_alarms, get_cell_kpis, lookup_topology  # noqa: E402
@@ -96,7 +96,11 @@ def run() -> None:
     step(2, "Synthesize")
     print("    " + synthesize(findings))
 
-    print(f"\n{BOLD}Wall clock:{RESET} {parallel_elapsed:.2f}s for {len(WORKERS)} analyses.")
+    # This number is only meaningful LIVE. With --mock, ask() returns a canned string
+    # immediately, so you are timing how fast Python can hand back three strings —
+    # expect 0.00s and read nothing into it. Run it with a key to see the real gap.
+    print(f"\n{BOLD}Wall clock:{RESET} {parallel_elapsed:.2f}s for {len(WORKERS)} analyses."
+          + ("   [mock: nothing was called, so this is not a measurement]" if offline() else ""))
     print(f"{GREEN}Run sequentially, the operator waits for the slowest chain instead of the "
           f"slowest single analysis.{RESET} With live model calls that difference is seconds per "
           "incident — and during a storm, seconds times hundreds.")

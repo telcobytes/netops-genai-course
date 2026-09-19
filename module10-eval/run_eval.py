@@ -185,6 +185,13 @@ Respond ONLY with valid JSON in this exact structure:
         return {"score": 0, "rationale": f"Judge error: {e}"}
 
 
+# What --mock actually does, because the name invites the wrong assumption: it does
+# NOT run the agent offline. There is no offline agent. It feeds these pre-recorded
+# answers to the same assertions, so you can exercise the HARNESS — the checks, the
+# report, a new case you just wrote — without spending a call or waiting on a model.
+#
+# Which means a green --mock run says the grader works, not that the agent does. The
+# only way to learn something about the agent is to run it live.
 MOCK_ANSWERS = {
     "EVAL-01": (
         "Impact: CELL-031A experiencing severe throughput degradation and elevated RRC drops.\n"
