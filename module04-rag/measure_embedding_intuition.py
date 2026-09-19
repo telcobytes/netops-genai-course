@@ -12,7 +12,7 @@ THE FOUR PHRASES (default)
     D  invoice dispute on account 4471          not a network fault
 
 No pair shares a content word, so bag-of-words scores every pair 0.00 and cannot
-rank any of them. The dense model can. Measured 17 Sep 2026 it ranked A-C (0.79)
+rank any of them. The dense model can. Measured, it ranked A-C (0.79)
 ABOVE A-B (0.61), with A-D last (0.51) -- that is, a DIFFERENT fault written in
 radio jargon beat the SAME fault written in plain operational language.
 

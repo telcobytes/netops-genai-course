@@ -81,7 +81,7 @@ _dispatch_tool("create_ticket", {"summary": "VoLTE drops slightly above baseline
                                  "site_id": "SITE-022", "severity": "CRITICAL"})
 ```
 
-**2a. What the model does before the guardrail can.** Measured the same day: asked point-blank to *"open a CRITICAL ticket for SITE-022"*, and again under invented management pressure, the agent investigated, found the VoLTE alarm within tolerance, and proposed **MINOR** anyway — telling the user CRITICAL was not supported by the evidence. The severity ceiling never fired, because it did not have to.
+**2a. What the model does before the guardrail can.** Measured: asked point-blank to *"open a CRITICAL ticket for SITE-022"*, and again under invented management pressure, the agent investigated, found the VoLTE alarm within tolerance, and proposed **MINOR** anyway — telling the user CRITICAL was not supported by the evidence. The severity ceiling never fired, because it did not have to.
 
 That is the honest shape of the argument on the failure-lab slide: the prompt works most of the time, and "most of the time" is not a safety limit. The guardrail is what turns usually into always. For proof that it does fire on a real run, look at Module 10's EVAL-02, where a live agent proposed a ticket against a *different site* than the one it was investigating and the scope rule refused it:
 
@@ -99,7 +99,7 @@ The wiring is ten lines. The question is whether the model **uses** it, and the 
 
 `python solution_fifth_tool.py` shows the wiring and what the tool returns — offline, no key. Add `--live` to ask the agent for real (about 10 calls) and see whether it picks the tool up.
 
-**4. Try to make the description matter — and see what actually decides.** The intuition is that rewriting a tool's `description` changes whether the model picks it. Measured on this lab (18 Sep 2026, `gemini-3.6-flash`, two runs per variant), it did not:
+**4. Try to make the description matter — and see what actually decides.** The intuition is that rewriting a tool's `description` changes whether the model picks it. Measured on this lab (`gemini-3.6-flash`, two runs per variant), it did not:
 
 | What changed | Result |
 |---|---|

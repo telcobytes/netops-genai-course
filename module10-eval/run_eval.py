@@ -122,7 +122,7 @@ MOCK_TRACES = {
         {"tool": "create_ticket", "args": {"summary": "Overflow congestion on CELL-031A",
                                            "site_id": "SITE-031", "severity": "MAJOR"}},
     ],
-    # EVAL-02's trace is the REAL failing run of 16 Sep 2026, recorded verbatim:
+    # EVAL-02's trace is a REAL failing run, recorded verbatim:
     # asked about a within-tolerance MINOR alarm on CELL-022A, the agent read the
     # neighbour and filed CRITICAL against SITE-031. Kept as a fixture so tier 1
     # goes red offline — a suite where everything passes is not a suite.

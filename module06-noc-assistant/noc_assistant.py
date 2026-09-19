@@ -126,7 +126,7 @@ TOOL_SCHEMAS = [
 # them. Every turn re-sends the whole conversation, so one fat result is paid for
 # again on every later turn.
 #
-# Measured on the nine tool calls this lab's own question produced (17 Sep 2026):
+# Measured on the nine tool calls this lab's own question produced:
 # 8,171 characters of tool results become 4,182, and the run sends 21,388
 # characters instead of 34,681 — 38% less, for one dropped field.
 KPI_FIELDS = ("cell_id", "window_start", "window_end", "latest", "rolling_avg",

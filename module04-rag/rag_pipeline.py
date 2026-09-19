@@ -190,7 +190,7 @@ def embed_with_gemini_api(texts, task_type="RETRIEVAL_DOCUMENT"):
 
 # The knowledge base does not change between queries, and gemini-embedding-* will
 # not embed a batch: llm_client tries one batched call, is refused, and then embeds
-# one text per call — so the 24 chunks cost 25 calls (measured 17 Sep 2026). Do it
+# one text per call — so the 24 chunks cost 25 calls (measured). Do it
 # once per process and reuse, rather than re-embedding on every retrieve().
 _chunk_vector_cache = {}
 
@@ -218,8 +218,7 @@ def build_retrieval_query(question, kpis=None, alarms=None, cell_id="", site_id=
     is what the retriever searches with. They are not the same thing, and the
     question still goes into the prompt unchanged -- this only changes the search.
 
-    Measured 16 Sep 2026 against the shipped knowledge base, EVAL-03, dense
-    embeddings. The scenario reads:
+    Measured against the shipped knowledge base, EVAL-03, dense embeddings. The scenario reads:
 
         "A trouble ticket (TCK-4471) reports slow data speeds near SITE-031
          during evening peak hours for the past three days, with no specific
@@ -287,7 +286,7 @@ last_engine = None
 # nothing in the knowledge base is relevant -- so the failure to watch for is
 # the WRONG document coming first, not an empty result.
 #
-# Measured example (Gemini, 17 Sep 2026), searching with TCK-4471 as written:
+# Measured example (gemini-embedding-2), searching with TCK-4471 as written:
 #   0.789  incident_003_volte_call_drops.md          <- ranked first, wrong fault
 #   0.788  incident_001_local_event_congestion.md    <- the right answer
 # A 0.001 gap decided it. That is why step 3 exists.

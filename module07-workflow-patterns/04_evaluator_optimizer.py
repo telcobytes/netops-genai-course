@@ -46,7 +46,7 @@ DIAGNOSTIC_LAYERS = [
 
 # The first draft is SEEDED, in both modes, and it is worth knowing why.
 #
-# Measured 18 Sep 2026: asked for this RCA cold, the live model went straight to
+# Measured: asked for this RCA cold, the live model went straight to
 # capacity exhaustion — the right answer — and the critic passed it on the first
 # attempt. A loop that never loops teaches nothing, so attempt 0 is a deliberately
 # weak draft: the mistake a tired engineer makes at 3am, blaming the most
@@ -153,7 +153,7 @@ def run(cell_id: str = "CELL-031A") -> None:
           "failure as the unconstrained ReAct loop in Module 5. MAX_REVISIONS is the circuit breaker.")
     print(f"{BOLD}Why this critic works:{RESET} it holds a checklist the drafter never saw. "
           "Delete the checklist and the critique does not go soft — it goes GENERIC. Measured "
-          "18 Sep 2026 on this same draft: the checklist-less critic still rejected it, but for "
+          "on this same draft, the checklist-less critic still rejected it, but for "
           "a missing timeline, missing preventive measures and an 'unconfirmed' cause. Plausible, "
           "professional, and not the diagnostic error. It would have sent the drafter off to add "
           "a timeline while it still blamed the AMF.")

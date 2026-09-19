@@ -112,7 +112,7 @@ def check_assertions(case: dict, answer: str, trace: list[dict]) -> list[dict]:
 
     # RANK, not membership. `must_retrieve` asks whether a document appears
     # anywhere in the top k, which is a weaker claim than it reads as: measured
-    # 16 Sep 2026, EVAL-03 passed it for months while dense retrieval ranked a
+    # EVAL-03 passed it for months while dense retrieval ranked a
     # VoLTE postmortem FIRST for a congestion question. An assertion that a wrong
     # top hit can satisfy is not testing the thing it names.
     for doc in spec.get("must_rank_first", []):
@@ -167,7 +167,7 @@ def _neighbour_ids(case: dict) -> set:
     `lookup_topology before create_ticket` was a PROXY for "checked the
     neighbours", and it turned out to be a bad one: an agent asked about SITE-031
     looks up SITE-031's topology as a matter of course, satisfying the assertion
-    without ever reading a neighbour. Measured on 16 Sep 2026, the naive prompt
+    without ever reading a neighbour. Measured, the naive prompt
     scored 100% on the proxy and touched zero neighbours. Assert the rule itself.
     """
     import os

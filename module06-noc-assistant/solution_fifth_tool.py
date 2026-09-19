@@ -16,8 +16,8 @@ The tool is get_recent_changes(site_id): change and maintenance records for a
 site. It is what a NOC correlates against first — before blaming a cell, ask
 whether anybody touched it — and nothing in the system prompt mentions it.
 
-WHAT HAPPENED WHEN THIS WAS RUN (18 Sep 2026, gemini-3.6-flash)
----------------------------------------------------------------
+WHAT HAPPENED WHEN THIS WAS RUN (gemini-3.6-flash)
+--------------------------------------------------
 The model called get_recent_changes unprompted, in its FIRST batch of tool calls,
 before it looked at a single KPI. It then cited CHG-2041 in its answer and noted
 that the retune "added no capacity" — i.e. it used the record to RULE OUT a cause,

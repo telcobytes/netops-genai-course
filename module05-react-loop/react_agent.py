@@ -68,7 +68,7 @@ ACTION_PATTERN = re.compile(r"Action:\s*(\w+)\[(.*?)\]")
 # conversation, so an observation kept at step 1 is paid for again at steps 2, 3
 # and 4. Cost grows with steps x history, not with steps.
 #
-# Measured on the four-step run this file prints (17 Sep 2026), replaying the same
+# Measured on the four-step run this file prints, replaying the same
 # actions with and without this one line:
 #
 #     without trimming   1,095 -> 3,400 -> 3,660 -> 4,688   12,843 chars sent

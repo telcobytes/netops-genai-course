@@ -56,7 +56,7 @@ run_react_agent("Why is CELL-031A underperforming right now?", history=session)
 run_react_agent("What should the NOC do about it first?", history=session)
 ```
 
-Measured 17 Sep 2026: the first question took 5 steps, the follow-up 2 — it already held the KPIs, the topology and the alarms, and spent its one call checking a neighbour's headroom before recommending an offload. Memory does not make the agent skip work; it stops it repeating work it already did.
+Measured: the first question took 5 steps, the follow-up 2 — it already held the KPIs, the topology and the alarms, and spent its one call checking a neighbour's headroom before recommending an offload. Memory does not make the agent skip work; it stops it repeating work it already did.
 
 Nothing about that memory lives in the model. It lives in your list, which is what "the agent has state" actually means — and why deciding what stays in it is your job.
 
@@ -72,8 +72,7 @@ This lab ships three read-only tools — `get_cell_kpis`, `get_active_alarms`, `
 
 ## Three things to expect when you run it
 
-**1. The same question is not the same run.** Measured 17 Sep 2026, same data, same model
-(`gemini-3.6-flash`): one run took 4 steps — KPIs, topology, alarms, answer — and the next took 5,
+**1. The same question is not the same run.** Measured on `gemini-3.6-flash`, same data, same model: one run took 4 steps — KPIs, topology, alarms, answer — and the next took 5,
 because it also checked a neighbour's counters. Both were right. Nothing in an agent is
 reproducible the way a function is, which is why Module 10 asserts on *properties* of a run
 (did it read a neighbour before blaming the cell?) rather than on the transcript.

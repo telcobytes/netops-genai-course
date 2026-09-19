@@ -5,8 +5,8 @@ solution_scope_guard.py — the worked answer to Module 10's hands-on.
     python solution_scope_guard.py            # offline, deterministic, no key
     python solution_scope_guard.py --live     # run the real agent once
 
-THE FAILURE, as it actually happened on 16 Sep 2026
----------------------------------------------------
+THE FAILURE, as it actually happened
+------------------------------------
 EVAL-02 asks about a MINOR, within-tolerance VoLTE alarm on CELL-022A. The agent
 checked CELL-022A, correctly found it healthy, then looked at the neighbour, found
 CELL-031A's congestion, and filed a CRITICAL ticket against SITE-031 — a different
@@ -14,7 +14,7 @@ site than the one it was asked about — explaining it with a causal link that
 nothing in the data supports.
 
 Tier 1 caught it -- the scope rule refuses the proposal before a human ever sees
-it. Tier 2 did not. On 16 Sep 2026 the judge scored this same answer 5/5 and
+it. Tier 2 did not: the judge scored this same answer 5/5 and
 called the invented mechanism "the true driver", against a rubric whose 5 reads
 "zero hallucination".
 

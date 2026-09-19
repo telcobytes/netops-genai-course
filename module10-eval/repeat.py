@@ -21,7 +21,7 @@ violated, and scoring that as a pass flatters an agent that did nothing.
 
 This used to assert `lookup_topology` before `create_ticket`, which sounds like
 the same thing and is not. An agent asked about SITE-031 looks up SITE-031's
-topology as a matter of course. Measured on 16 Sep 2026, the naive prompt scored
+topology as a matter of course. Measured, the naive prompt scored
 100% on that proxy across five runs while reading ZERO neighbours. Assert the
 rule; a proxy that a failing agent satisfies is not a measurement.
 

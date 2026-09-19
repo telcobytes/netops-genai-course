@@ -63,7 +63,7 @@ inside the same wiring.
 
 ## What you should see
 
-Measured 18 Sep 2026 on `gemini-3.6-flash`, and identical offline unless noted.
+Measured on `gemini-3.6-flash`, and identical offline unless noted.
 Your live numbers may differ a little — agent runs vary — but the shapes should hold.
 
 **1. Chaining.** Three links, each validated before the next runs: a fault domain
