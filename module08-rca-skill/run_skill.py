@@ -21,6 +21,7 @@ import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
 from llm_client import call_llm_tools  # noqa: E402
+import guardrails  # noqa: E402
 from tools import get_cell_kpis, get_active_alarms, lookup_topology, create_ticket  # noqa: E402
 
 SKILL_FILE = os.path.join(os.path.dirname(__file__), "SKILL.md")
@@ -101,6 +102,21 @@ TOOL_SCHEMAS = [
 
 def _dispatch_tool(name: str, args: dict):
     if name == "create_ticket":
+        # The same two checks Module 6 put in front of the human, for the same
+        # reason: a person must never be asked to approve something code can
+        # already prove is wrong. A later module must not quietly weaken an
+        # earlier module's lesson — and a student copying this dispatch into
+        # their own work would inherit whatever it does here.
+        try:
+            args = guardrails.validate_tool_args("create_ticket", args)
+        except guardrails.GuardrailError as err:
+            print(f"\n  >>> SCHEMA REFUSED: {err}")
+            return {"status": "refused_by_schema", "reason": str(err)}
+        allowed, reason = guardrails.check_ticket_proposal(args)
+        if not allowed:
+            print(f"\n  >>> GUARDRAIL REFUSED: {reason}")
+            return {"status": "refused_by_guardrail", "reason": reason}
+
         print(f"\n  >>> Skill requested ticket creation: {args}")
         if os.environ.get("AUTO_APPROVE") == "1":
             print("      [AUTO_APPROVE=1 detected: ticket approved]")

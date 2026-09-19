@@ -32,6 +32,7 @@ import os
 import sys
 
 sys.path.append(os.path.join(os.path.dirname(__file__), "..", "data"))
+import guardrails  # noqa: E402
 from mock_tools import (  # noqa: E402
     get_cell_kpis,
     get_active_alarms,
@@ -79,10 +80,24 @@ def lookup_topology_tool(node_id: str) -> dict:
 @mcp.tool()
 def create_ticket_tool(summary: str, site_id: str = "", category: str = "Uncategorized",
                        severity: str = "MINOR") -> dict:
-    """Open a trouble ticket. MOCK — has no real side effect in this course repo,
-    but in production this is the one tool that should always require
-    human-in-the-loop approval before it actually fires (see Module 10)."""
-    return create_ticket(summary, site_id, category, severity)
+    """Open a trouble ticket. MOCK — no real side effect in this course repo.
+
+    The argument schema is enforced HERE, in the server, and that is the point of
+    the module: once a tool is exposed over a protocol, any compatible host can
+    call it — Claude Desktop, someone else's agent, a script. The guard has to
+    travel with the tool, because you no longer control the caller.
+
+    Approval is the part that cannot live here: this process is a subprocess
+    speaking stdio, with no human attached. In a real deployment the host owns
+    the approval gate (Module 6) and the server owns the schema.
+    """
+    try:
+        args = guardrails.validate_tool_args("create_ticket", {
+            "summary": summary, "site_id": site_id,
+            "category": category, "severity": severity})
+    except guardrails.GuardrailError as err:
+        return {"status": "refused_by_schema", "reason": str(err)}
+    return create_ticket(**args)
 
 
 # --- MCP Primitives: Resources (Read-Only Context Streams) ---
