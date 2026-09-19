@@ -41,11 +41,11 @@ Run:
     python anomaly_explainer.py CELL-031A            # a real anomaly in the sample data
     python anomaly_explainer.py CELL-022A            # healthy cell
     python anomaly_explainer.py CELL-031A --runs=10  # ten samples per rung, not three
+    python anomaly_explainer.py CELL-031A --no-examples   # drop the examples from the
+                                                          # validated report as well
 
     Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
     there is no offline mode here.
-    python anomaly_explainer.py CELL-031A --no-examples   # drop the examples from the
-                                                          # validated report as well
 """
 
 import json
@@ -382,8 +382,9 @@ if __name__ == "__main__":
         "     broken the case that already worked. Two lines of code.\n"
         "     Stuck, or want to compare? python solution_no_fault.py\n"
         "\n"
-        f"  3. python {os.path.basename(__file__)} {cell_id} --runs=10\n"
-        "     Three samples per rung is a demo; ten is closer to evidence.\n"
+        f"  3. python {os.path.basename(__file__)} CELL-031A --runs=10\n"
+        "     The broken cell, ten runs. Three samples per rung is a demo;\n"
+        "     ten is closer to evidence.\n"
         "     Write down what each rung bought — Module 10 asks the same\n"
         "     question with a proper harness and you will want the comparison.\n"
         "\n"

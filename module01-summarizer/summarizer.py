@@ -9,9 +9,6 @@ Run:
 
     Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
     there is no offline mode here.
-
-Requires: GEMINI_API_KEY set in your environment (or see llm_client.py to switch
-providers).
 """
 
 import csv

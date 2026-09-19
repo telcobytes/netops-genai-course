@@ -33,12 +33,33 @@ Pydantic rejection as its own step.
 Categorize this cell anomaly in a few words: {readings}
 ```
 
-The script asks three times. You get three reasonable answers and no two identical
-strings: *"capacity congestion"*, *"high user density"*, *"PRB exhaustion event"*.
+The script asks three times — ten with `--runs=10`. You get reasonable answers and
+almost no two identical strings: *"Cell Congestion / Capacity Overload"*, *"Severe Cell
+Congestion"*, *"High Traffic Congestion / Cell Overload"*, and so on.
 
-Every one of those is correct. None of them is something `if category == ...` can
-branch on, and that is the whole problem. This is also the first time in the course you
-see non-determinism do real damage — Module 10 is built on it.
+Now look closely at what is drifting, because it is not what people expect.
+
+On CELL-031A those answers are **not** disagreeing. Ten runs produced nine distinct
+strings and every one of them meant *congestion*. The model was not confused, not
+unsure, not split between hypotheses — it agreed with itself completely and still
+handed back nine different spellings of the same conclusion.
+
+That is worse than disagreement, not better. A model that was genuinely torn would at
+least be telling you something. This one is confident, correct, consistent, and still
+`0/10` usable:
+
+```python
+if category == "CAPACITY_PRB_EXHAUSTION":   # never fires. Not once.
+```
+
+The drift is in the *wording*, and the wording is the only part your code can see.
+
+Run the healthy cell and you get the other half of the picture: ten runs, ten distinct
+strings, every one of them meaning "nothing is wrong" — and every one of them right.
+Either way, zero that code can branch on.
+
+This is the first time in the course you see non-determinism do real damage, and
+Module 10 is built on it.
 
 ## 2. Taxonomy enforcement — and which intervention actually does it
 

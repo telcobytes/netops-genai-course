@@ -48,21 +48,33 @@ def _silence_afc_advisory():
 _client = None
 
 
+def require_api_key():
+    """Exit with a readable message if GEMINI_API_KEY is not set.
+
+    Every lab reaches this through call_llm(). gemini_quickstart.py is the one
+    file that builds its own genai.Client(), so it calls this directly — without
+    it, the first script a student ever runs answers a missing key with twenty
+    lines of SDK traceback instead of the instruction to set one.
+    """
+    if os.environ.get("GEMINI_API_KEY"):
+        return
+    print("\n" + "=" * 65)
+    print("[ERROR] GEMINI_API_KEY environment variable is not set.")
+    print("=" * 65)
+    print("To run the course labs, set your API key in your terminal session:")
+    print("  macOS / Linux:       export GEMINI_API_KEY=\"your_api_key_here\"")
+    print("  Windows CMD:         set GEMINI_API_KEY=\"your_api_key_here\"")
+    print("  Windows PowerShell:  $env:GEMINI_API_KEY=\"your_api_key_here\"")
+    print("\nYou can get a free API key at: https://aistudio.google.com/")
+    print("(Google AI Studio free tier does not require a credit card)")
+    print("=" * 65 + "\n")
+    sys.exit(1)
+
+
 def _get_client():
     global _client
     if _client is None:
-        if not os.environ.get("GEMINI_API_KEY"):
-            print("\n" + "=" * 65)
-            print("[ERROR] GEMINI_API_KEY environment variable is not set.")
-            print("=" * 65)
-            print("To run the course labs, set your API key in your terminal session:")
-            print("  macOS / Linux:       export GEMINI_API_KEY=\"your_api_key_here\"")
-            print("  Windows CMD:         set GEMINI_API_KEY=\"your_api_key_here\"")
-            print("  Windows PowerShell:  $env:GEMINI_API_KEY=\"your_api_key_here\"")
-            print("\nYou can get a free API key at: https://aistudio.google.com/")
-            print("(Google AI Studio free tier does not require a credit card)")
-            print("=" * 65 + "\n")
-            sys.exit(1)
+        require_api_key()
         from google import genai
         _silence_afc_advisory()   # after the import, so its loggers exist
         _client = genai.Client()  # reads GEMINI_API_KEY from the environment
