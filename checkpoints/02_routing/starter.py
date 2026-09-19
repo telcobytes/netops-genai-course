@@ -43,4 +43,11 @@ def load_alarms() -> list:
 
 if __name__ == "__main__":
     for alarm in load_alarms():
-        print(f"{alarm['alarm_id']} [{alarm['severity']:8}] -> {route(alarm)}")
+        try:
+            print(f"{alarm['alarm_id']} [{alarm['severity']:8}] -> {route(alarm)}")
+        except NotImplementedError:
+            # The exercise itself, not a broken lab. Say so plainly rather than
+            # dumping a stack trace at somebody on their first checkpoint.
+            print("\n  route() is not implemented yet — that is the exercise.")
+            print("  Open starter.py, implement route(), then run: python check.py\n")
+            break

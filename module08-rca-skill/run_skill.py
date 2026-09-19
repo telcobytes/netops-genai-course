@@ -10,6 +10,9 @@ Demonstrates how modern agent architectures ingest an external Skill (SKILL.md):
 Run:
     python run_skill.py
     python run_skill.py CELL-022A
+
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
 """
 
 import json

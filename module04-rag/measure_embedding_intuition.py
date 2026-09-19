@@ -5,6 +5,9 @@ measure_embedding_intuition.py — the numbers behind the Module 4 intuition sli
     GEMINI_API_KEY=... python module04-rag/measure_embedding_intuition.py            # the four phrases
     GEMINI_API_KEY=... python module04-rag/measure_embedding_intuition.py --probe    # the 2x2 probe
 
+    Without a key it still prints the shared-word counts and the bag-of-words
+    matrix — the half that needs no model — then stops before the dense numbers.
+
 THE FOUR PHRASES (default)
     A  PRB saturation at the cell edge          incident_001's language
     B  site overloaded during evening peak      the ticket's language

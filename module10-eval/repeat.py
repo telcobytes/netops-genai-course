@@ -6,6 +6,9 @@ repeat.py — Module 10 hands-on: the same question, several times.
     python module10-eval/repeat.py --runs 5 --prompt naive
     python module10-eval/repeat.py --runs 5 --mode chained
 
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
+
 An agent does not give you the same answer twice, and — more to the point — it
 does not take the same PATH twice. The conclusion is often stable while the
 process underneath it is not, and nothing in the answer text tells you which run

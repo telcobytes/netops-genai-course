@@ -41,6 +41,9 @@ Run:
     python anomaly_explainer.py CELL-031A            # a real anomaly in the sample data
     python anomaly_explainer.py CELL-022A            # healthy cell
     python anomaly_explainer.py CELL-031A --runs=10  # ten samples per rung, not three
+
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
     python anomaly_explainer.py CELL-031A --no-examples   # drop the examples from the
                                                           # validated report as well
 """

@@ -13,6 +13,9 @@ Pipeline: Detect -> Correlate -> Retrieve -> Diagnose -> Draft
 
 Run:
     python noc_copilot.py
+
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
 """
 
 import json

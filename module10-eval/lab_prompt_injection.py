@@ -5,6 +5,9 @@ lab_prompt_injection.py — Module 10, Failure Lab: the alarm that gave the orde
     python module10-eval/lab_prompt_injection.py            # the attack, live
     python module10-eval/lab_prompt_injection.py --clean     # the same run, unpoisoned
 
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
+
 THE GAP THIS LAB EXISTS TO CLOSE
 --------------------------------
 Every guardrail built so far defends against the model being WRONG. None of them

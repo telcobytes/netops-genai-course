@@ -49,6 +49,9 @@ declaring it once.
 Run:
     python solution_no_fault.py              # both cells, 5 runs each
     python solution_no_fault.py --runs=10
+
+    Needs GEMINI_API_KEY. Without it, the run prints how to set one and stops —
+    there is no offline mode here.
 """
 
 import os
