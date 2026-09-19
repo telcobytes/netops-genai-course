@@ -81,6 +81,9 @@ CRITIQUES = [
 
 
 def draft_rca(cell_id: str, attempt: int, feedback: str = "") -> str:
+    """Everything the drafter is given: the evidence, and on a revision the
+    reviewer's complaint. Note what it is NOT given — the 4-layer checklist. That
+    asymmetry is the pattern, and it is one prompt away from being lost."""
     kpis = get_cell_kpis(cell_id)
     # The first draft is asked for three lines and nothing else. That is the point:
     # it has no idea a reviewer exists, so it writes what anyone writes under
@@ -175,7 +178,14 @@ def run(cell_id: str = "CELL-031A") -> None:
         print(f"\n{CYAN}{BOLD}[{label}]{RESET}" +
               (f"  {YELLOW}(seeded — a live model rarely writes a draft this bad){RESET}"
                if attempt == 0 else ""))
-        # Attempt 0 is the seeded weak draft; revisions are the real thing.
+        # Attempt 0 is the seeded weak draft: a fixed string, no model call, no
+        # evidence. From attempt 1 the drafter gets the full picture — the KPI
+        # summary, which thresholds are crossed, the site's alarms and the
+        # topology — plus the critic's feedback.
+        #
+        # So the revision is not a rewording of the same guess. The model has what
+        # it needs to actually rule RF and transport out, which is why it can
+        # satisfy a critic that checks whether it did.
         rca = DRAFTS[0] if attempt == 0 else draft_rca(cell_id, attempt, feedback)
         print("    " + rca.replace("\n", "\n    "))
 
