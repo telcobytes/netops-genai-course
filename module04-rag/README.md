@@ -40,27 +40,27 @@ A step this module skips: a typed question does not arrive with IDs. The ticket 
 
 ---
 
-## How to Run
+## Two ways to run each lab
 
-```bash
-# Ensure your environment has your API key
-export GEMINI_API_KEY="..."
+| Lab | Offline | Live |
+|---|---|---|
+| `rag_pipeline.py` | `python rag_pipeline.py` with no key — retrieval runs on word counts | `export GEMINI_API_KEY=...` then the same command — Gemini embeddings, and the final RCA step runs |
+| `lab_query_construction.py` | `python lab_query_construction.py --offline` | `python lab_query_construction.py` |
+| `04_rag.ipynb` | — | Colab or Jupyter, key required |
 
-# Run the pipeline
-python rag_pipeline.py
+Both scripts tell you which engine ranked, on the line that starts `Retrieval engine`.
 
-# Compare the three query styles on EVAL-03's ticket
-python lab_query_construction.py            # needs GEMINI_API_KEY
-python lab_query_construction.py --offline  # bag-of-words, no key
-```
+**Offline is not a lesser version of the same thing, and this module is where that
+matters most.** Word counts match spelling; embeddings match meaning. The
+query-construction failure this module is built around *does not reproduce offline*,
+because bag-of-words never had the meaning to be misled by. Study the mechanics
+without a key by all means, then run it live before you believe any ranking.
 
-If embeddings fail, check which models your key can use:
+If embeddings fail with a key set, the run says so loudly rather than quietly
+falling back. Check which models your key can use:
 
 ```bash
 python ../data/llm_client.py --embeddings
 ```
-
-### Automatic Offline Fallback:
-If `GEMINI_API_KEY` is not set, `rag_pipeline.py` falls back to an offline bag-of-words keyword vectorizer, so you can still see cosine-similarity retrieval work without a key. If a key **is** set but embeddings fail, it prints a warning before falling back.
 
 Bag-of-words matches words, not meaning. It does **not** reproduce the query-construction failure that `lab_query_construction.py` is built around. Run that lab with a key to see it.

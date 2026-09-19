@@ -96,13 +96,13 @@ failure lab is an alarm whose description tells the agent what to do.
 
 ---
 
-## How to run
+## How to run — live only
 
 ```bash
 export GEMINI_API_KEY="..."          # free key: aistudio.google.com
 python react_agent.py                 # the question, then a follow-up on the same session
 ```
 
-Without a key it prints how to set one and exits — this module needs a model, since the whole lab is the model deciding what to do next.
+There is no mock mode here, and that is deliberate: the lab *is* the model deciding what to do next, so a canned version would be a slideshow. Without a key it prints how to set one and exits.
 
 In Colab, open `05_react_loop.ipynb`, which adds a rendered trace, the memory section, and six exercises: ask about the healthy cell CELL-022A, take `lookup_topology` away and watch it blame the cell it was given, ask for a tool that is not registered, squeeze the budget to 2 steps, watch it recover from a wrong argument, and run the same question twice to see the step count change.

@@ -45,20 +45,24 @@ Only a proposal that passes both reaches a human. And if the human says **no**, 
 
 ---
 
-## How to Run
+## Two ways to run
 
-```bash
-export GEMINI_API_KEY="..."
+| | Command | What you get |
+|---|---|---|
+| **Offline** | `python ../data/guardrails.py`<br>`python solution_fifth_tool.py` | The guards and the tool wiring, deterministically, no key: six tool calls with three blocked, and the fifth-tool exercise's plumbing |
+| **Live** | `export GEMINI_API_KEY=...`<br>`python noc_assistant.py` | The assistant itself — the model chooses tools, and it pauses for your approval before any ticket is opened |
 
-# Run interactively (will pause for your approval before opening a ticket):
-python noc_assistant.py
-```
+The assistant has no mock mode, deliberately: the thing being taught is a model
+choosing tools, and there is nothing to watch without one. What you *can* study
+without a key is every decision your code makes — which is where the safety lives.
 
-### Unattended / Automated Testing
-To run in CI/CD or automated evaluation where `input()` is not interactive:
+For CI or an unattended run, where `input()` has no one to ask:
+
 ```bash
 AUTO_APPROVE=1 python noc_assistant.py
 ```
+
+That skips the human gate and nothing else; the schema and policy checks still run.
 
 ---
 

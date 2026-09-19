@@ -32,9 +32,16 @@ The scenario is the one running through the whole course: **CELL-031A is degradi
 and the question is whether the cell is at fault or something else is pushing load
 onto it.**
 
-Each script calls a model through `_common.ask()`, which returns a canned response
-when you pass `--mock` or have no API key. So you can study the wiring offline for
-free, then run the same file live to see a real model inside it.
+## Two ways to run every lab
+
+| | Command | What you get |
+|---|---|---|
+| **Mock** | `python 02_routing.py --mock` | Canned model answers. The wiring runs end to end, free, no key, same result every time. |
+| **Live** | `python 02_routing.py` | The same wiring with a real model making the decisions. Needs `GEMINI_API_KEY`. |
+
+Without a key you get mock either way, and the first line of output says so. Start
+in mock to see the shape, then run it live — the orchestration is the lesson, and
+the model is a component inside it.
 
 ## The five patterns
 
@@ -48,8 +55,6 @@ free, then run the same file live to see a real model inside it.
 
 ## Run them
 
-Offline first — the orchestration is the lesson, and studying it costs nothing:
-
 ```bash
 python 01_prompt_chaining.py --mock
 python 02_routing.py --mock
@@ -58,8 +63,7 @@ python 04_evaluator_optimizer.py --mock
 python 05_orchestrator_workers.py --mock
 ```
 
-Then drop `--mock` on any of them, with `GEMINI_API_KEY` set, to put a real model
-inside the same wiring.
+Drop `--mock` on any of them to run it live.
 
 ## What you should see
 
