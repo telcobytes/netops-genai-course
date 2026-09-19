@@ -88,8 +88,19 @@ prints its wall clock — 5.07s live for three analyses. Run sequentially, the
 operator waits for the sum instead of the slowest one.
 
 **4. Evaluator-optimizer.** The first draft blames the AMF and is REJECTED, with the
-skipped layers named; revision 1 walks the cheaper layers first and PASSES. Three
-live runs, same shape each time.
+skipped layers named; revision 1 walks the cheaper layers first and PASSES.
+
+Then the run ends by putting that same draft past **two critics at once** — one
+holding the checklist, one without it, everything else identical:
+
+```
+WITH the 4-layer checklist   rejected for: Physical / RF, Transport / Backhaul
+WITHOUT it                   rejected for: incident timeline, preventive measures,
+                                           confirmed root cause
+```
+
+Both rejected it. Only one read the actual mistake. That contrast is the pattern's
+whole argument, so the lab runs it rather than asserting it.
 
 **5. Orchestrator-workers.** Four raw alarms collapse to two incidents, the two desks
 report separately and **disagree**, and the supervisor says which evidence it relied

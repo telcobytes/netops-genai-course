@@ -122,6 +122,49 @@ Respond ONLY as JSON: {{"passed": bool, "missing": [layer names skipped], "note"
     return json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
 
 
+# The same critic with its advantage taken away. Nothing else changes: same draft,
+# same model, same instruction to return JSON. Only the checklist is gone — which is
+# the one variable this pattern lives or dies on, so the lab shows it rather than
+# claiming it.
+NO_CHECKLIST_MOCK = json.dumps({
+    "passed": False,
+    "missing": ["incident timeline", "preventive measures", "confirmed root cause"],
+    "note": "The RCA relies on an unverified likely cause and lacks a timeline and "
+            "mitigation steps.",
+})
+
+
+def critique_without_checklist(rca: str) -> dict:
+    prompt = f"""You are reviewing an RCA.
+
+RCA UNDER REVIEW:
+{rca}
+
+Respond ONLY as JSON: {{"passed": bool, "missing": [what it skipped], "note": "one sentence"}}"""
+    raw = ask(prompt, mock=NO_CHECKLIST_MOCK)
+    return json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+
+
+def show_the_asymmetry(rca: str) -> None:
+    """One draft, two critics. The only difference is the checklist."""
+    with_list = critique(rca, 0)
+    without = critique_without_checklist(rca)
+    print(f"\n{BOLD}{'=' * 72}{RESET}")
+    print(f"{BOLD}THE SAME DRAFT, TWO CRITICS{RESET}   the only difference is the checklist")
+    print(f"{BOLD}{'=' * 72}{RESET}")
+    print(f"\n{GREEN}WITH the 4-layer checklist{RESET}   rejected for: "
+          f"{', '.join(with_list['missing'])}")
+    print(f"    {with_list['note']}")
+    print(f"\n{YELLOW}WITHOUT it{RESET}                   rejected for: "
+          f"{', '.join(str(m) for m in without['missing'])}")
+    print(f"    {without['note']}")
+    print(f"\n{BOLD}Both rejected the draft. Only one of them read the actual mistake.{RESET}")
+    print("The second invented plausible criteria — a timeline, preventive measures — and")
+    print("would have sent the drafter off to add them while it still blamed the AMF.")
+    print(f"{BOLD}A critic without an asymmetric advantage does not go quiet. It goes GENERIC,{RESET}")
+    print(f"{BOLD}and generic looks like rigour.{RESET}")
+
+
 def run(cell_id: str = "CELL-031A") -> None:
     banner("PATTERN 4 — EVALUATOR-OPTIMIZER",
            "draft -> critique against the 4-layer order -> revise, bounded at 2 rounds")
@@ -154,12 +197,7 @@ def run(cell_id: str = "CELL-031A") -> None:
     print(f"\n{BOLD}Why the bound matters:{RESET} unbounded critique loops oscillate. The drafter "
           "removes a caveat, the critic asks for it back, and you pay for both forever — the same "
           "failure as the unconstrained ReAct loop in Module 5. MAX_REVISIONS is the circuit breaker.")
-    print(f"{BOLD}Why this critic works:{RESET} it holds a checklist the drafter never saw. "
-          "Delete the checklist and the critique does not go soft — it goes GENERIC. Measured "
-          "on this same draft, the checklist-less critic still rejected it, but for "
-          "a missing timeline, missing preventive measures and an 'unconfirmed' cause. Plausible, "
-          "professional, and not the diagnostic error. It would have sent the drafter off to add "
-          "a timeline while it still blamed the AMF.")
+    show_the_asymmetry(DRAFTS[0])
 
 
 if __name__ == "__main__":
