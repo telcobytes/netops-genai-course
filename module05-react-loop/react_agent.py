@@ -13,7 +13,11 @@ Safety circuit breakers implemented:
 3. Graceful fallback: handles unknown tools and execution errors without crashing.
 
 Run:
-    python react_agent.py
+    python react_agent.py        # needs GEMINI_API_KEY
+
+    There is no offline mode. The lab IS the model deciding what to do next, so
+    a canned version would be a slideshow. Without a key it prints how to set
+    one and exits.
 """
 
 import os

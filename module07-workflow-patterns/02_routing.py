@@ -17,7 +17,10 @@ The part people skip:
   A DROP route. Most alarm feeds are mostly noise. A router without a way to
   say "this needs nobody" just distributes the noise more efficiently.
 
-Run:  python 02_routing.py [--mock]
+Run:  python 02_routing.py --mock     # canned answers: the wiring, free, same every time
+      python 02_routing.py            # the same wiring with a live model in it
+
+      Without GEMINI_API_KEY you get --mock either way, and the banner says so.
 """
 
 import json

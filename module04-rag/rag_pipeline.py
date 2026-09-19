@@ -13,6 +13,10 @@ offline bag-of-words keyword vectorizer if offline.
 Run:
     python rag_pipeline.py
 
+    Without GEMINI_API_KEY it still runs: retrieval falls back to word counts
+    and the final RCA step is skipped. With a key: Gemini embeddings, and the
+    drafter writes the RCA. Either way the run prints which engine ranked.
+
 HOW IT FITS TOGETHER, IN PLAIN TERMS
 Think of the knowledge base as a filing cabinet of old incident reports. When a
 new ticket comes in, a good NOC engineer does not re-read the whole cabinet.

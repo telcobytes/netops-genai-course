@@ -18,7 +18,7 @@ model to judge — the model is slower, costs money, and is occasionally wrong
 about something a two-line comparison gets right every time.
 
 Run tier 1 only (no API key needed):
-    python run_eval.py
+    python run_eval.py            # live agents; without a key it says so and uses --mock
 
 Run both tiers:
     python run_eval.py --judge

@@ -23,7 +23,10 @@ Note this is NOT the same thing as Module 10's evaluation:
                 2-4x the tokens, and it never tells you the agent works.
 You want both, for different reasons.
 
-Run:  python 04_evaluator_optimizer.py [--mock]
+Run:  python 04_evaluator_optimizer.py --mock     # canned answers: the wiring, free, same every time
+      python 04_evaluator_optimizer.py            # the same wiring with a live model in it
+
+      Without GEMINI_API_KEY you get --mock either way, and the banner says so.
 """
 
 import json

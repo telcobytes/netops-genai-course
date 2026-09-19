@@ -25,7 +25,10 @@ read which evidence it preferred and why.
 That is exactly the CELL-031A question this course opened with: is the cell at
 fault, or is something upstream of it?
 
-Run:  python 05_orchestrator_workers.py [--mock]
+Run:  python 05_orchestrator_workers.py --mock     # canned answers: the wiring, free, same every time
+      python 05_orchestrator_workers.py            # the same wiring with a live model in it
+
+      Without GEMINI_API_KEY you get --mock either way, and the banner says so.
 """
 
 import json

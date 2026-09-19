@@ -11,7 +11,12 @@ human "y/n" confirmation before it actually fires (Module 10's human-in-the-loop
 rule, previewed here).
 
 Run:
-    python noc_assistant.py
+    python noc_assistant.py                  # needs GEMINI_API_KEY
+    AUTO_APPROVE=1 python noc_assistant.py   # unattended: skips the human gate
+
+    No offline mode: the lesson is a model choosing tools. Without a key it
+    prints how to set one and exits. To study the parts that need no model, run
+    ../data/guardrails.py or solution_fifth_tool.py.
 """
 
 import json

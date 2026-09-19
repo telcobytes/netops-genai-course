@@ -17,7 +17,10 @@ Why it beats one big prompt:
   you can see exactly which link broke, and you can put a cheap deterministic
   check between any two links.
 
-Run:  python 01_prompt_chaining.py [--mock]
+Run:  python 01_prompt_chaining.py --mock     # canned answers: the wiring, free, same every time
+      python 01_prompt_chaining.py            # the same wiring with a live model in it
+
+      Without GEMINI_API_KEY you get --mock either way, and the banner says so.
 """
 
 import json
