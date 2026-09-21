@@ -50,6 +50,11 @@ A step this module skips: a typed question does not arrive with IDs. The ticket 
 
 Both scripts tell you which engine ranked, on the line that starts `Retrieval engine`.
 
+`04_rag.ipynb` ends with four exercises the scripts do not carry: search for something the
+knowledge base does not cover, describe symptoms two incidents share, draft the RCA from the
+ticket as written and watch a bad query pull the wrong document, and filter the pool by site
+before ranking. Open the notebook for those even if you are working locally.
+
 **Offline is not a lesser version of the same thing, and this module is where that
 matters most.** Word counts match spelling; embeddings match meaning. The
 query-construction failure this module is built around *does not reproduce offline*,
