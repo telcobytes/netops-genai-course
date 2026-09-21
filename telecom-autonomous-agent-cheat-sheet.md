@@ -17,7 +17,7 @@ A durable reference guide for building and deploying AI agents in Mobile Network
 │ • Privilege Scoping: Autonomous read-only vs. gated mutating tools          │
 │ • Schema Enforcement: Strict Pydantic parameter range validation            │
 │ • Injection Hardening: Data-delimiter isolation (`<ticket_text>`)           │
-│ • Regression Testing: 3-tier golden evals (Trace, Schema, LLM-as-a-Judge)   │
+│ • Regression Testing: 2-tier golden evals (T1 trace+schema, T2 LLM-judge)   │
 │ • Core Gate: `create_ticket` / state mutation ALWAYS requires human sign-off │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │ LAYER 3: COGNITIVE REASONING ENGINE                                         │
@@ -45,9 +45,11 @@ A durable reference guide for building and deploying AI agents in Mobile Network
 ## 2. The 4 Golden Rules of Telecom Agent Engineering
 
 1. **Ground First:** Retrieval and live telemetry beat parametric weights every time. Even a #1 benchmarked domain model like TelecomGPT-R1 has zero knowledge of your live network's real-time state.
-2. **Tools Compute, Agents Reason:** Never pass raw 1-second counter dumps into an LLM. Compute 15-minute rolling averages and threshold deltas inside your tool; let the agent interpret the semantic meaning.
-3. **Standardize via MCP:** Implement your OSS/BSS connectors once behind an MCP server. Any compliant host (IDE, desktop app, custom backend) can connect without rewriting custom glue code.
-4. **Enforce Human Gates:** Any action that mutates network state or submits an external ticket must require human-in-the-loop approval. Tracing and evals tell you the agent is *probably* right; humans keep "probably" from causing network outages.
+2. **Standardize via MCP:** Implement your OSS/BSS connectors once behind an MCP server. Any compliant host (IDE, desktop app, custom backend) can connect without rewriting custom glue code.
+3. **Enforce Human Gates:** Any action that mutates network state or submits an external ticket must require human-in-the-loop approval. Tracing and evals tell you the agent is *probably* right; humans keep "probably" from causing network outages.
+4. **Trace Every Execution:** Log every tool call — name, arguments, result and timing — to a durable, run-scoped record. If you cannot see what the agent checked and why, you can neither debug it nor trust it. The trace is not just for postmortems: it is what your eval asserts against, because tier 1 grades what the agent *did*, not what it said afterwards.
+
+**A fifth that pays for itself:** **Tools compute, agents reason.** Never pass raw 1-second counter dumps into an LLM. Compute 15-minute rolling averages and threshold deltas inside your tool; let the agent interpret the semantic meaning.
 
 ---
 
@@ -105,7 +107,7 @@ When running autonomous triage loops in your Python agent, always implement the 
 Add this bullet to your CV or LinkedIn profile:
 
 > **Autonomous Telecom Operations Engineer**
-> *"Architected and deployed an end-to-end Autonomous NOC Triage Agent in Python using ReAct loops, Model Context Protocol (MCP), and Structure-Aware RAG. Automated cross-domain root-cause analysis across 4G/5G RAN, Backhaul, and Core networks, reducing incident triage time from 20 minutes to 4 seconds with 3-tier golden-set eval verification."*
+> *"Architected and implemented an end-to-end Autonomous NOC Triage Agent in Python using ReAct loops, Model Context Protocol (MCP), and Structure-Aware RAG. Automated 4G/5G RAN root-cause analysis — correlating KPI counters, active alarms and topology, and ruling out transport and neighbour-overflow causes before escalating — taking incident triage from minutes to seconds, with a 2-tier golden-set eval suite gating regressions and a human approval gate on every write action."*
 
 ---
 
